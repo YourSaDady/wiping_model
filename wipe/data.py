@@ -1,10 +1,15 @@
 """Demo storage and the observation vector shared by every policy.
 
 Episodes are stored one per file: data/demos/K{K_n}/{table}/{index:03d}.npz.
-The observation is identical for every label:
-  o_t = (x_t, xdot_t, f_t, p0, L, n)  -> 16 numbers
+The observation is identical for every label.
+  version 1: o_t = (x_t, xdot_t, f_t, p0, L, n)                      -> 16 numbers
+  version 2: version 1 + (u1/L, u2/L, h) + u_t                      -> 20 numbers
 x is the ball-centre position, xdot its velocity, f the contact force on the
 tool (world frame), p0 the region corner, L its side, n the table normal.
+Version 2 adds two progress cues computed from the same measurements: the ball
+position in region coordinates (u1, u2 along t1, t2 scaled by L; h along n),
+and the uncovered fraction u_t of the region so far (the task's own coverage
+score, which the robot can track online from x and f).
 """
 from __future__ import annotations
 
@@ -16,17 +21,20 @@ import numpy as np
 
 from .scene import Scene
 
-OBS_DIM = 16
+OBS_DIMS = {1: 16, 2: 20}
 DATA_ROOT = os.environ.get("WIPE_DATA", os.path.join(os.path.dirname(os.path.dirname(__file__)), "data"))
 
 
-def obs_vector(x, xdot, f, scene: Scene) -> np.ndarray:
-    """x, xdot, f: (..., 3) -> (..., 16)."""
+def obs_vector(x, xdot, f, scene: Scene, u=None, version: int = 1) -> np.ndarray:
+    """x, xdot, f: (..., 3), u: (...) uncovered fraction -> (..., OBS_DIMS[version])."""
     x = np.asarray(x, float)
     lead = x.shape[:-1]
     const = np.concatenate([scene.arr("p0"), [scene.L], scene.arr("n")])
-    return np.concatenate([x, np.asarray(xdot, float), np.asarray(f, float),
-                           np.broadcast_to(const, lead + (7,))], axis=-1)
+    parts = [x, np.asarray(xdot, float), np.asarray(f, float), np.broadcast_to(const, lead + (7,))]
+    if version >= 2:
+        r = scene.to_plane(x)
+        parts += [r[..., :2] / scene.L, r[..., 2:3], np.asarray(u, float).reshape(lead + (1,))]
+    return np.concatenate(parts, axis=-1)
 
 
 def demo_path(K_n: int, table: str, index: int, root: str = DATA_ROOT) -> str:

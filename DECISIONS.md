@@ -80,3 +80,19 @@ Cartesian stiffness control in operational-space form (Ch. 8), our own `LeafSyst
 | Normal direction | Approach: velocity servo F_n = D_n(−v_app − ẋ_n) with v_app = 8 mm/s until f_n ≥ 1 N. Then F_n = −(f_ref + k_p(f_ref − f_n) + k_i ∫(f_ref − f_n)) − D_n ẋ_n with k_p = 0.3, k_i = 6 s⁻¹, anti-windup ±10 N, f_ref ramping to f_des over 0.5 s | Blind approach: impact force ≈ v·sqrt(k_e m_eff). At 1.5 cm/s it reached 20.9 N on k_e = 1e5; 8 mm/s gives ≈ 11 N on the stiffest training table (tuned on training tables only). On the OOD k_e = 3e5 table it stays borderline (5/6, max 22 N in a 6-scene dev check). |
 | Tangential | Same stiffness/damping as the impedance controller, tracking the same lane path and corner speed profile | Same lane pattern as the expert. |
 | Lift | Velocity servo +3 cm/s for 1.5 s | No height knowledge. |
+
+## Policies (open decisions 4, 8, 9)
+
+| Item | Choice | Reason |
+|---|---|---|
+| Observation (open decision 4) | Proposal's o_t = (x, ẋ, f, p0, L, n), 16 numbers, T_o = 2; **no progress feature** | Checked lane-end ambiguity with the label-(b) pilot: at 10k steps 5/120 validation scenes failed by skipping or offsetting lanes; at 20k, 30k and 40k steps 119/120, 120/120, 120/120 (relative) and 120/120 ×3 (absolute). The ambiguity is resolved by training, so the observation stays as proposed. A version-2 observation (adds region-frame coordinates u1/L, u2/L, h and the online uncovered fraction u_t) is implemented (`wipe/data.py`, `--obs-version 2`) and lifted the nearest-neighbour smoke test from 115/120 to 120/120, but it is not used. |
+| Action representation | **Relative** to the current ball position: a_j = label_{t+j} − x_t, same for every label | Pilot on label (b), K_n = 500 (`runs/pilot_K500_b_{rel,abs}`): closed-loop validation success was tied (rel 115/119/120/120, abs 115/120/120/120 of 120 at 10k/20k/30k/40k steps); relative had lower first-action error on held-out demos (0.53 vs 0.79 mm at 30k) and makes chunks invariant to where the region is (BC notes §4.3). |
+| Architecture / diffusion | 1D temporal U-Net, down dims (256, 512, 1024), kernel 5, 8 groups, FiLM on [step embedding, flattened obs]; 65.7M parameters. DDPM 100 steps, squared-cosine schedule, ε-prediction, clip to [−1, 1]; DDIM 16 steps (η = 0) at inference | Paper low-dim defaults; 16 DDIM steps cost ≈ 95 ms per batch, negligible next to simulation. |
+| Horizons | T_o = 2, H = 16, execute 8 (0.4 s) | Defaults. |
+| Optimizer | AdamW lr 1e-4, wd 1e-6, betas (0.95, 0.999), batch 256, cosine schedule with 500 warm-up steps, EMA (power 0.75, max 0.9999) | Defaults. |
+| Normalization | Min-max to [−1, 1] per dimension from training windows only; constant dimensions map to 0 | Default. |
+| Training length | 40 000 steps (≈ 50 epochs of 202 817 windows); EMA snapshot every 5 000 | Pilot reached 120/120 from 20k; 40k ≈ 25 min alone on the A6000 (38 ms/step), ≈ 75 min when 3 runs share it. |
+| Checkpoint selection | Among the last 4 snapshots (25k–40k): most successes on 120 closed-loop validation scenes (10 per training table, split `val`), ties → lower validation denoising loss | Brief: validation loss + closed-loop validation scenes, never test scenes. |
+| Runs | K_n = 500: 4 labels × seeds {0, 1, 2}; K_n = 250 and 1000: 4 labels × seed 0 (20 runs, `scripts/sweep_list.txt`) | Brief. |
+| DDIM noise at evaluation | Initial noise seeded by (scene seed, inference-call index) | Every policy sees the same noise on the same scene, results do not depend on batching, and trials are paired across methods. |
+| Train / val demos | Per table: first 32 kept demos train, next 4 validate (by episode) | 384 train / 48 val episodes per K. |

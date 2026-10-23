@@ -24,8 +24,9 @@ class DiffusionPolicy:
         self.on = Normalizer.from_state(self.cfg["obs_norm"])
         self.an = Normalizer.from_state(self.cfg["act_norm"])
         self.To, self.H, self.relative = self.cfg["To"], self.cfg["H"], self.cfg["relative"]
+        self.obs_version = self.cfg.get("obs_version", 1)
         dims = tuple(int(d) for d in self.cfg["down_dims"].split(","))
-        self.model = ConditionalUnet1D(3, self.To * 16, down_dims=dims).to(device).eval()
+        self.model = ConditionalUnet1D(3, len(self.on.lo) * self.To, down_dims=dims).to(device).eval()
         ckpt = ckpt or self.latest(run_dir)
         self.model.load_state_dict(torch.load(ckpt, map_location=device, weights_only=False)["ema"])
         self.ckpt = ckpt
@@ -53,10 +54,10 @@ class DiffusionPolicy:
 
 
 class NearestNeighborPolicy:
-    def __init__(self, train_paths, label, K_n, To=2, H=16, device="cuda"):
-        O, A, _ = build_windows(train_paths, label, K_n, To, H, relative=True)
+    def __init__(self, train_paths, label, K_n, To=2, H=16, device="cuda", obs_version=1):
+        O, A, _ = build_windows(train_paths, label, K_n, To, H, relative=True, obs_version=obs_version)
         self.on = Normalizer.fit(O)
-        self.To, self.H, self.relative = To, H, True
+        self.To, self.H, self.relative, self.obs_version = To, H, True, obs_version
         self.keys = torch.tensor(self.on.norm(O).reshape(len(O), -1), device=device)
         self.A = A
         self.device = device

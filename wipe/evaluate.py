@@ -17,7 +17,7 @@ import numpy as np
 from .config import DT_POLICY, GAINS_BY_KN, T_MAX
 
 
-def _worker(conn, To):
+def _worker(conn, To, obs_version):
     from .data import obs_vector
     from .scene import Scene
     from .sim import WipeEnv
@@ -33,7 +33,7 @@ def _worker(conn, To):
                 scene = Scene.from_dict(scene_d)
                 env = WipeEnv(scene, GAINS_BY_KN[K_n], record_q=record)
                 o = env.observe()
-                obs_hist = [obs_vector(o["x"], o["xdot"], o["f"], scene)]
+                obs_hist = [obs_vector(o["x"], o["xdot"], o["f"], scene, o["u"], obs_version)]
                 trace = {"x": [o["x"]], "f": [o["f"]], "xd": []}
                 conn.send(("obs", _hist(obs_hist, To), o["x"]))
             elif cmd == "step":
@@ -41,7 +41,7 @@ def _worker(conn, To):
                 done = False
                 for xd in targets:
                     o = env.step(xd)
-                    obs_hist.append(obs_vector(o["x"], o["xdot"], o["f"], env.scene))
+                    obs_hist.append(obs_vector(o["x"], o["xdot"], o["f"], env.scene, o["u"], obs_version))
                     trace["x"].append(o["x"]); trace["f"].append(o["f"]); trace["xd"].append(np.asarray(xd))
                     if env.k * DT_POLICY >= t_max - 1e-9:
                         done = True
@@ -71,7 +71,7 @@ def evaluate_policy(policy, jobs, n_workers=24, n_exec=8, t_max=T_MAX, on_result
     pipes, procs = [], []
     for _ in range(min(n_workers, len(jobs))):
         a, b = ctx.Pipe()
-        p = ctx.Process(target=_worker, args=(b, policy.To), daemon=True)
+        p = ctx.Process(target=_worker, args=(b, policy.To, getattr(policy, "obs_version", 1)), daemon=True)
         p.start()
         pipes.append(a)
         procs.append(p)

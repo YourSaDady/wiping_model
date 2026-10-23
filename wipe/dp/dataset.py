@@ -11,7 +11,7 @@ from __future__ import annotations
 import numpy as np
 
 from ..config import GAINS_BY_KN
-from ..data import OBS_DIM, load_episode, obs_vector
+from ..data import load_episode, obs_vector
 from ..labels import make_labels
 
 
@@ -43,11 +43,11 @@ class Normalizer:
         return Normalizer(d["lo"], d["hi"])
 
 
-def episode_arrays(ep, label: str, K_n: int):
+def episode_arrays(ep, label: str, K_n: int, obs_version: int = 1):
     sc = ep["scene"]
     g = GAINS_BY_KN[K_n]
     n = sc.arr("n")
-    obs = obs_vector(ep["x"], ep["xdot"], ep["f"], sc)                       # (T+1, 16)
+    obs = obs_vector(ep["x"], ep["xdot"], ep["f"], sc, ep["u"], obs_version)   # (T+1, D)
     lab = make_labels(ep["x"], ep["xdot"], ep["f"], ep["x_d"], g.K(n), g.D(n), label)   # (T, 3)
     return obs.astype(np.float32), lab.astype(np.float32)
 
@@ -65,11 +65,11 @@ def make_windows(obs, lab, x, To=2, H=16, relative=True):
     return O.astype(np.float32), A.astype(np.float32)
 
 
-def build_windows(paths, label: str, K_n: int, To=2, H=16, relative=True):
+def build_windows(paths, label: str, K_n: int, To=2, H=16, relative=True, obs_version: int = 1):
     Os, As, meta = [], [], []
     for ei, p in enumerate(paths):
         ep = load_episode(p)
-        obs, lab = episode_arrays(ep, label, K_n)
+        obs, lab = episode_arrays(ep, label, K_n, obs_version)
         O, A = make_windows(obs, lab, ep["x"], To, H, relative)
         Os.append(O)
         As.append(A)

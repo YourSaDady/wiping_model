@@ -52,6 +52,7 @@ def main():
     ap.add_argument("--record-q", type=int, default=0)
     ap.add_argument("--out", default=None)
     ap.add_argument("--name", default=None)
+    ap.add_argument("--obs-version", type=int, default=1, help="nearest-neighbour policy only")
     args = ap.parse_args()
 
     if args.nn:
@@ -59,8 +60,8 @@ def main():
         from wipe.policy import NearestNeighborPolicy
         K = args.K or 500
         tr, _ = split_paths(K, [t.name for t in TRAIN_TABLES], 32, 4)
-        policy = NearestNeighborPolicy(tr, args.nn, K)
-        name = args.name or f"NN_K{K}_{args.nn}"
+        policy = NearestNeighborPolicy(tr, args.nn, K, obs_version=args.obs_version)
+        name = args.name or f"NN_K{K}_{args.nn}" + (f"_obs{args.obs_version}" if args.obs_version > 1 else "")
         ckpt = None
     else:
         from wipe.policy import DiffusionPolicy

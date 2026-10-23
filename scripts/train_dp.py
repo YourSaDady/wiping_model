@@ -42,6 +42,7 @@ def main():
     ap.add_argument("--tables", default="")
     ap.add_argument("--eval-every", type=int, default=5000)
     ap.add_argument("--ddim-steps", type=int, default=16)
+    ap.add_argument("--obs-version", type=int, default=1)
     args = ap.parse_args()
 
     os.makedirs(args.out, exist_ok=True)
@@ -51,8 +52,8 @@ def main():
     tables = [t.name for t in TRAIN_TABLES if not args.tables or t.name in args.tables.split(",")]
     tr_paths, va_paths = split_paths(args.K, tables, args.n_train, args.n_val)
     rel = not args.abs
-    O, A, _ = build_windows(tr_paths, args.label, args.K, args.To, args.H, rel)
-    Ov, Av, _ = build_windows(va_paths, args.label, args.K, args.To, args.H, rel)
+    O, A, _ = build_windows(tr_paths, args.label, args.K, args.To, args.H, rel, args.obs_version)
+    Ov, Av, _ = build_windows(va_paths, args.label, args.K, args.To, args.H, rel, args.obs_version)
     on, an = Normalizer.fit(O), Normalizer.fit(A)
     cfg = dict(vars(args), relative=rel, obs_norm=on.state_dict(), act_norm=an.state_dict(),
                n_train_windows=len(O), n_val_windows=len(Ov), train_paths=tr_paths, val_paths=va_paths)
