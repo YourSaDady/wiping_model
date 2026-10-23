@@ -25,7 +25,7 @@ def fmt_rate(r):
 def fmt_tests(t):
     t = t.copy()
     for c in [c for c in t.columns if c.endswith("_p") or "_p_" in c or c.endswith("_seed0")]:
-        t[c] = t[c].map(lambda p: f"{p:.1e}" if p < 1e-3 else f"{p:.3f}")
+        t[c] = t[c].map(lambda p: "<1e-300" if p == 0 else (f"{p:.1e}" if p < 1e-3 else f"{p:.3f}"))
     for c in ("succ_A", "succ_B"):
         t[c] = t[c].map(lambda v: f"{v:.3f}")
     return t.to_markdown(index=False)
