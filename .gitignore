@@ -8,3 +8,5 @@ results/raw/
 results/videos/*.mp4
 .cache/
 *.egg-info/
+data
+.venv

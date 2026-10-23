@@ -91,3 +91,26 @@ def test_force_sign_and_springs_in_series(K_n, k_e):
         assert f @ n == pytest.approx(K_eff * delta, rel=0.01, abs=0.02)
     finally:
         del cfg.TABLES[name]
+
+
+def test_pose_force_label_rebuilds_cp():
+    from wipe.labels import rebuild_target
+    rng = np.random.default_rng(1)
+    T = 5
+    x, xdot, f = rng.normal(size=(T + 1, 3)), rng.normal(size=(T + 1, 3)), rng.normal(size=(T + 1, 3))
+    x_d = rng.normal(size=(T, 3))
+    n = np.array([0.0, -np.sin(0.2), np.cos(0.2)])
+    g = Gains()
+    pf = make_labels(x, xdot, f, x_d, g.K(n), g.D(n), "pf")
+    cp = make_labels(x, xdot, f, x_d, g.K(n), g.D(n), "cp")
+    assert pf.shape == (T, 9)
+    assert np.allclose(rebuild_target(pf, g.K(n), g.D(n)), cp)
+
+
+def test_relative_windows_only_shift_position():
+    from wipe.dp.dataset import make_windows
+    T = 6
+    obs = np.zeros((T + 1, 16)); x = np.arange((T + 1) * 3, dtype=float).reshape(T + 1, 3)
+    lab = np.ones((T, 9))
+    O, A = make_windows(obs, lab, x, 2, 4, relative=True)
+    assert np.allclose(A[2, 0, :3], 1 - x[2]) and np.allclose(A[2, 0, 3:], 1.0)

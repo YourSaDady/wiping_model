@@ -9,12 +9,15 @@ matrices of the controller that recorded the demo.
   (b)  x_{d,k}                                    commanded target
   (c)  x_{k+1} - K^{-1} f_{k+1}                   force-compensated (static)
   (c') x_{k+1} + K^{-1} (D xdot_{k+1} - f_{k+1})  force + damping compensated
+  (pf) [x_{k+1}, xdot_{k+1}, f_{k+1}]             pose + velocity + force (9 numbers);
+       a controller with its own K', D' rebuilds x_d = x + K'^{-1}(D' xdot - f)
+       (stretch goal: stiffness-agnostic label)
 """
 from __future__ import annotations
 
 import numpy as np
 
-LABELS = ("a", "b", "c", "cp")
+LABELS = ("a", "b", "c", "cp")          # the four main labels; "pf" is the stretch label
 LABEL_NAMES = {"a": "(a) measured x", "b": "(b) commanded x_d", "c": "(c) x - K^-1 f",
                "cp": "(c') x + K^-1(D xdot - f)"}
 
@@ -31,4 +34,20 @@ def make_labels(x, xdot, f, x_d, K, D, which: str) -> np.ndarray:
         return x[1:] - f[1:] @ Kinv.T
     if which == "cp":
         return x[1:] + (xdot[1:] @ D.T - f[1:]) @ Kinv.T
+    if which == "pf":
+        return np.concatenate([x[1:], xdot[1:], f[1:]], axis=1)
     raise ValueError(which)
+
+
+def rebuild_target(pf, K, D) -> np.ndarray:
+    """(..., 9) pose/velocity/force prediction -> (..., 3) target for gains K, D."""
+    pf = np.asarray(pf, float)
+    x, xdot, f = pf[..., :3], pf[..., 3:6], pf[..., 6:9]
+    return x + (xdot @ D.T - f) @ np.linalg.inv(K).T
+
+
+def corrupt_force(f, n, sigma: float, bias: float, rng) -> np.ndarray:
+    """Force-sensor model for the label stretch study: iid Gaussian noise (std sigma, N)
+    on each axis plus a constant bias (N) along the table normal n."""
+    f = np.asarray(f, float)
+    return f + rng.normal(0.0, sigma, f.shape) + bias * np.asarray(n, float)

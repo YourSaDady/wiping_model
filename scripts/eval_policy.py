@@ -53,6 +53,9 @@ def main():
     ap.add_argument("--out", default=None)
     ap.add_argument("--name", default=None)
     ap.add_argument("--obs-version", type=int, default=1, help="nearest-neighbour policy only")
+    ap.add_argument("--deploy-K", type=int, default=None,
+                    help="run the controller at this K_n (default: the K the policy was trained at); "
+                         "a 'pf' policy rebuilds its targets with these gains")
     args = ap.parse_args()
 
     if args.nn:
@@ -69,6 +72,11 @@ def main():
         policy = DiffusionPolicy(args.run, ckpt, ddim_steps=args.ddim_steps)
         K = policy.cfg["K"]
         tag = "" if args.ckpt in (None, "latest", "selected") else f"_ck{os.path.basename(policy.ckpt)[4:-3]}"
+        if args.deploy_K and args.deploy_K != K:
+            from wipe.config import GAINS_BY_KN
+            K = args.deploy_K
+            policy.deploy_gains = GAINS_BY_KN[K]
+            tag += f"_dK{K}"
         name = args.name or os.path.basename(os.path.normpath(args.run)) + tag
         ckpt = policy.ckpt
     out = args.out or f"results/raw/{name}_{args.split}.jsonl"
