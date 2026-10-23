@@ -146,6 +146,15 @@ Classical (Ch. 8, "hybrid position/force control"), at 1 kHz, torque level:
   GroupNorm + Mish), conditioned by FiLM: every residual block gets a per-channel scale and
   bias computed from [diffusion-step embedding, flattened 2-frame observation].
 - **Noise schedule**: squared cosine (Nichol & Dhariwal), 100 steps.
+- **Parameter count** (all 20 main policies are the same network, 65,670,403 parameters;
+  the 9-D `pf` stretch policy has 65,681,161): step-embedding MLP 0.53M; encoder level 0
+  (3→256) 1.48M, level 1 (256→512) 6.10M, level 2 (512→1024) 20.07M; bottleneck 22.17M;
+  decoder (2048→512) 11.87M, (1024→256) 3.12M; output head 0.33M. FiLM layers are 4.14M (6.3 %).
+  Most weights sit at the 1024-channel bottleneck, where the chunk has only 4 time steps:
+  the paper's low-dim default is far larger than a 16×3 action chunk needs, but we kept it.
+- **Shapes**: noisy chunk (B, 16, 3) → channels-first (B, 3, 16) → 256@16 → 512@8 → 1024@4 →
+  bottleneck 1024@4 → 512@8 → 256@16 → 3@16. Conditioning vector per block: 256 (step) + 32
+  (2 frames × 16 observation numbers) = 288.
 - **Action representation**: targets relative to the current ball position, a_j = target_{t+j} − x_t
   (all labels identically). Execution: add x_t back, execute the first 8 targets (0.4 s), observe,
   re-plan (receding horizon, BC notes §4.2–4.3).
