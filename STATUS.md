@@ -81,10 +81,23 @@ Command: `python scripts/phase1_checks.py --n 50` (≈ 12 min on 28 workers), th
 - tmux `evalq`: `scripts/eval_queue.sh` — final test evaluation (50 scenes × 17 tables): scripted
   at K_n = 500/250/1000 and hybrid first, then each sweep run once its `selected.json` exists.
   Results `results/raw/<method>_test.jsonl` (+ `_traces/` for the first 3 scenes per table, q
-  recorded for scene 0). Started 2026-10-23 09:59 UTC. Resumable.
+  recorded for scene 0). Started 2026-10-23 09:59 UTC; restarted 11:29 with the pipelined evaluator
+  (`EVAL_WORKERS=48`, ≈ 20 min per policy while training shares the GPU). Resumable.
+- tmux `extra`: `scripts/extra_queue.sh` — time-limit sensitivity (T_MAX = 100 s, seed-0 K_n = 500
+  policies, training-table test scenes); starts after `evalq`.
+- tmux `stretch`: `scripts/stretch_queue.sh` — starts after the main sweep finishes training.
 - Dev worktree `../6.4212-wiping-dev` (branch `dev`): stretch-goal code (pose+force label `pf`,
   `--deploy-K`, label force noise/bias), P2 inertia diagnostic, P1/P3/P4 figure scripts. Merge
   into master after the sweep (kept separate so running jobs never load half-edited code).
+
+## First results (validation, 2026-10-23 11:25)
+
+- K500 seed 0 selection (120 val scenes): (b) 120/120 (30k), (a) 0/120 (mean f_n ≈ 0.5 N),
+  (c) 6/120: it reaches the table only after median 29.5 s (expert ≈ 4 s), then wipes at
+  ≈ 9.1 N but runs out of time (38 % uncovered); 19/120 also exceed 20 N at onset on hard tables.
+- Baselines on the 850 test scenes (final): scripted K500 850/850; hybrid ID 600/600, OOD 231/250
+  (19 fails on k_e = 3e5, impact peaks ≤ 22.1 N); scripted K250 fails 46/50 on k_e = 3e5 (only used
+  as the P1 reference on training tables), scripted K1000 850/850.
 
 ## Next
 
