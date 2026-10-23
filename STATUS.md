@@ -147,3 +147,38 @@ scripted 100 / 100 %, hybrid 100 / 92 %, DP (a) 0 / 0 %, (b) 99.6 / 52 %, (c) 7 
 2. Stretch results (tmux `stretch`): pf label at K′, force noise/bias → analysis script + notes.
 3. Phase 7: storyboard, TEAM_GUIDE Q&A with final numbers, AI_USE, TA check-in notes.
 4. Pending team decision: optional inertia-corrected (c″) diagnostic.
+
+## TA check-in notes (bullet facts — rewrite in your own words before submitting)
+
+Progress updates are graded communication, so per the course GAI policy these are facts to
+turn into your own paragraph, not a paragraph to paste. All milestone goals of the proposal
+were reached early (on 2026-10-23); the dates below are the proposal's milestones.
+
+**Oct 30 milestone** (goal: impedance-controlled iiwa + ball tool, tilted tables with adjustable
+k_e, logging; expert wipes a flat table; DP code runs)
+- Done. Drake iiwa14 + 2 cm ball tool; own Cartesian impedance controller (table-frame gains);
+  12 training tables (tilt 0/10/20° × k_e 500–1e5 N/m) + 5 OOD; 20 Hz logging of x, ẋ, f, x_d, u.
+- Expert succeeds on all tables (50/50 per table, peak ≤ 15.6 N); needed a 2 cm slow zone and lane-corner
+  slowdown because the effective mass along n is ≈ 18 kg (contact underdamped on hard tables).
+- DP re-implementation trains (65.7M-param 1D U-Net, DDPM/DDIM).
+
+**Nov 6 milestone** (goal: expert reliable on all training tables; demos + all labels; offline P2;
+first policy in closed loop)
+- 432 demos per controller stiffness (K_n = 250, 500, 1000); all four labels; replay checks:
+  (b) exact, (a) keeps K/(K+k_e) on soft tables, (c) overshoots at contact onset.
+- Offline P2: (c) − (b) gap 6–14 mm ≈ D v/K; (c′) halves it; remainder is inertia (1 kHz check).
+- First policy (label (b)) 120/120 on validation scenes; relative actions chosen by a pilot.
+
+**Nov 13 milestone** (goal: policies for all labels; hybrid baseline; held-out evaluation)
+- 20 policies trained (4 labels × 3 seeds at K_n = 500, + 1 seed each at K_n = 250, 1000);
+  checkpoints chosen on 120 closed-loop validation scenes.
+- Hybrid force/position baseline (no table height): 600/600 ID, 231/250 OOD.
+
+**Nov 24 milestone** (goal: full evaluation with CIs; P1–P4)
+- 50 test scenes × 17 tables per method. ID / OOD success: (b) 99.6 / 52 %, (c′) 24 / 28 %, (c) 7 / 4 %,
+  (a) 0 / 0 %, scripted 100 / 100 %, hybrid 100 / 92 %.
+- Findings: (a) and (c) fail by creeping toward the table (no lead before contact; P4), (c) recovers at
+  K_n = 1000; (c′) learns velocity feedback that cancels ≈ 2/3 of the damping → chatter; P3 spread grows
+  with stiffness but not only via K_eff; all learned policies degrade on the unseen 28° tilt.
+
+**Dec 2** — stretch results (pose+force label at a new K′; force noise/bias) and report/video by the team.
