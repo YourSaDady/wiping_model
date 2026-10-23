@@ -209,3 +209,42 @@ Classical (Ch. 8, "hybrid position/force control"), at 1 kHz, torque level:
   position.
 - *How do you know it is not overfit to the test scenes?* Test scenes have their own seeds and
   were run once, after all choices were frozen; checkpoints were chosen on validation scenes.
+
+## 13. Results you must be able to explain (final test numbers; details in REPORT_NOTES.md)
+
+Headline (K_n = 500, 50 test scenes × 12 training tables × 3 seeds = 1800 ID episodes per label;
+OOD: 5 tables × 50 × 3 = 750): scripted 100 / 100 %, hybrid 100 / 92 %, (a) 0 / 0 %,
+(b) 99.6 / 52 %, (c) 7 / 4 %, (c′) 24 / 28 % (ID / OOD success).
+
+- *Why does (a) fail even on the soft table where K/(K+k_e) = 0.5 predicts 5 N?* Because in closed
+  loop it never gets there: before contact (a)'s targets are just "where the hand will be", with no
+  lead, so with D_n/K_n = 0.5 s of lag the arm creeps down at ≈ 1.9 mm/s and touches the table ≈ 23 s
+  after the expert; once touching it presses ≈ 0.3–0.7 N. The two-spring formula holds open loop
+  (replay: 0.494 vs 0.5) but is not the binding limit in closed loop.
+- *Why does (c) fail if it reproduces the force in steady wiping?* Same free-space problem: (c) = (a)
+  until f > 0. Median first contact 24.9 s late, approach 1.4 mm/s → runs out of the 50 s. Once in
+  contact its force is right (101 % of the expert's). With a stiffer controller the missing lead D v/K
+  shrinks and (c) recovers: 0.2 % → 6.5 % → 77 % ID success at K_n = 250 / 500 / 1000.
+- *(c′) adds D ẋ: why is it still bad?* It does fix the approach (contact on time). But the policy
+  learns that the target lead scales with its *observed* velocity, G_n = 0.33 s along n (D_n/K_n =
+  0.5 s). Plugged into F = K(x_d − x) − D ẋ this cancels ≈ 2/3 of the controller's damping (87 vs
+  250 N·s/m left; (b) leaves 175). On stiff tables the lightly damped contact chatters (peaks up to
+  50 N), and in the plane it overshoots lane ends. Offline label accuracy ≠ closed-loop quality.
+- *What explains the remaining (c′)–(b) gap offline?* Inertia: under the 20 Hz zero-order hold the
+  target jumps every 50 ms and the ≈ 9–18 kg effective mass accelerates within each step; subtracting
+  K⁻¹[Λa] cuts the gap from 6.7 to 2.7 mm.
+- *P3?* With steady-wiping force std (onset and lift removed), spread grows with table stiffness for
+  every impedance-based method (rank correlation +0.56 to +0.84 within each K_n) and is flat for the
+  hybrid controller, which closes the loop on force. But it keeps growing where K_eff ≈ K has
+  saturated (k_e 2e4 → 3e5), so contact vibration matters beyond the quasi-static K_eff·δ; and the
+  policies' one-step target errors (0.1–0.5 mm) predict only 0.1–0.2 N. Direction supported,
+  mechanism only partly.
+- *P4, steeper tilt?* All learned policies degrade on 28° (unseen; training ≤ 20°): (b) 0 %, (c′)
+  24–31 %, baselines 100 %. (b) presses correctly but its commanded lead up the slope collapses, so
+  it never steps to the next lane and wipes below the region. Only 3 tilt values in training.
+- *Why are the baselines so good?* The scripted program is privileged (knows the plane) and the
+  hybrid controller regulates the measured force directly; neither depends on a label. They show
+  the task is solvable; the comparison is about what a learned policy can recover from each label.
+- *How many trials, how sure?* 600 ID scenes per policy per seed, Wilson 95 % CIs (e.g. (b)
+  [99, 100] %), every label pair different with Holm-corrected Fisher p ≤ 3e-40 and paired McNemar
+  p ≤ 1e-11 on ID tables.
