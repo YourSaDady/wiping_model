@@ -23,6 +23,7 @@ class DDPM:
         self.T = T
         betas = cosine_betas(T)
         self.alphas_cumprod = torch.cumprod(1.0 - betas, 0).float().to(device)
+        self.ab_list = self.alphas_cumprod.cpu().tolist()       # host copy for the sampler
 
     def add_noise(self, x0, noise, t):
         ab = self.alphas_cumprod[t].view(-1, *([1] * (x0.dim() - 1)))
@@ -30,18 +31,20 @@ class DDPM:
 
     @torch.no_grad()
     def ddim_sample(self, model, cond, shape, n_steps: int = 16, generator=None, noise=None):
-        """Deterministic DDIM from pure noise. cond: (B, cond_dim)."""
+        """Deterministic DDIM from pure noise. cond: (B, cond_dim). Uses only
+        tensor-by-Python-scalar arithmetic so it can be captured in a CUDA graph."""
         x = noise if noise is not None else torch.randn(shape, device=cond.device, generator=generator)
         ratio = self.T // n_steps
         steps = (torch.arange(n_steps) * ratio).flip(0).tolist()       # e.g. 90, 80, ..., 0
+        ab = self.ab_list
         for t in steps:
             tb = torch.full((shape[0],), t, device=cond.device, dtype=torch.long)
             eps = model(x, tb, cond)
-            ab_t = self.alphas_cumprod[t]
-            ab_prev = self.alphas_cumprod[t - ratio] if t - ratio >= 0 else torch.tensor(1.0, device=cond.device)
-            x0 = ((x - (1 - ab_t).sqrt() * eps) / ab_t.sqrt()).clamp(-1, 1)
-            eps = (x - ab_t.sqrt() * x0) / (1 - ab_t).sqrt()                # re-derive after clipping
-            x = ab_prev.sqrt() * x0 + (1 - ab_prev).sqrt() * eps
+            ab_t = ab[t]
+            ab_prev = ab[t - ratio] if t - ratio >= 0 else 1.0
+            x0 = ((x - math.sqrt(1 - ab_t) * eps) / math.sqrt(ab_t)).clamp(-1, 1)
+            eps = (x - math.sqrt(ab_t) * x0) / math.sqrt(1 - ab_t)          # re-derive after clipping
+            x = math.sqrt(ab_prev) * x0 + math.sqrt(1 - ab_prev) * eps
         return x
 
 

@@ -64,9 +64,15 @@ def _hist(obs_hist, To):
     return np.stack([obs_hist[i] for i in idx])
 
 
-def evaluate_policy(policy, jobs, n_workers=24, n_exec=8, t_max=T_MAX, on_result=None, log_every=60):
+def evaluate_policy(policy, jobs, n_workers=24, n_exec=8, t_max=T_MAX, on_result=None, log_every=60,
+                    n_groups=2):
     """jobs: list of dicts with keys scene (Scene), K_n, seed, record (bool), and any
-    metadata. on_result(job, out) is called as each episode finishes."""
+    metadata. on_result(job, out) is called as each episode finishes.
+
+    Workers are split into n_groups groups that alternate: while the GPU computes the
+    chunks for one group, the other groups' simulators are stepping, so inference and
+    simulation overlap. Results do not depend on the grouping (the DDIM noise is seeded
+    per scene and call)."""
     ctx = mp.get_context("spawn")
     pipes, procs = [], []
     for _ in range(min(n_workers, len(jobs))):
@@ -79,6 +85,7 @@ def evaluate_policy(policy, jobs, n_workers=24, n_exec=8, t_max=T_MAX, on_result
     active = {}          # worker id -> dict(job, O, x, calls)
     results = []
     t0, last = time.time(), time.time()
+    groups = [list(range(g, len(pipes), n_groups)) for g in range(n_groups)]
 
     def start(w):
         if not queue:
@@ -88,29 +95,35 @@ def evaluate_policy(policy, jobs, n_workers=24, n_exec=8, t_max=T_MAX, on_result
         kind, O, x = _recv(pipes[w])
         active[w] = dict(job=job, O=O, x=x, calls=0)
 
-    for w in range(len(pipes)):
-        start(w)
-    while active:
-        ws = sorted(active)
+    def dispatch(ws):
+        ws = [w for w in ws if w in active]
+        if not ws:
+            return []
         O = np.stack([active[w]["O"] for w in ws])
         X = np.stack([active[w]["x"] for w in ws])
-        seeds = [active[w]["job"]["seed"] for w in ws]
-        calls = [active[w]["calls"] for w in ws]
-        A = policy.act(O, X, seeds, calls)
+        A = policy.act(O, X, [active[w]["job"]["seed"] for w in ws], [active[w]["calls"] for w in ws])
         for i, w in enumerate(ws):
             pipes[w].send(("step", A[i, :n_exec], t_max))
             active[w]["calls"] += 1
-        for w in ws:
-            msg = _recv(pipes[w])
-            if msg[0] == "obs":
-                active[w]["O"], active[w]["x"] = msg[1], msg[2]
-            else:
-                job = active.pop(w)["job"]
-                out = msg[1]
-                results.append((job, out))
-                if on_result:
-                    on_result(job, out)
-                start(w)
+        return ws
+
+    for w in range(len(pipes)):
+        start(w)
+    in_flight = [dispatch(g) for g in groups]
+    while any(in_flight):
+        for gi, g in enumerate(groups):
+            for w in in_flight[gi]:
+                msg = _recv(pipes[w])
+                if msg[0] == "obs":
+                    active[w]["O"], active[w]["x"] = msg[1], msg[2]
+                else:
+                    job = active.pop(w)["job"]
+                    out = msg[1]
+                    results.append((job, out))
+                    if on_result:
+                        on_result(job, out)
+                    start(w)
+            in_flight[gi] = dispatch(g)
         if time.time() - last > log_every:
             last = time.time()
             print(f"  eval: {len(results)}/{len(jobs)} done, {time.time()-t0:.0f}s", flush=True)

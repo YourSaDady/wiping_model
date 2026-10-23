@@ -38,6 +38,34 @@ class DiffusionPolicy:
         self.ddpm = DDPM(100, device)
         self.device = device
         self.ddim_steps = ddim_steps or self.cfg.get("ddim_steps", 16)
+        self.use_graph = device.startswith("cuda") and os.environ.get("WIPE_NO_CUDA_GRAPH") != "1"
+        self._graphs = {}
+
+    def _sample(self, cond, noise):
+        """DDIM sampling; on CUDA the 16-step loop is captured once per padded batch
+        size as a CUDA graph (same arithmetic, ~1 launch instead of thousands)."""
+        B = cond.shape[0]
+        if not self.use_graph:
+            return self.ddpm.ddim_sample(self.model, cond, noise.shape, self.ddim_steps, noise=noise)
+        Bp = max(8, 1 << (B - 1).bit_length())
+        if Bp not in self._graphs:
+            sc = torch.zeros((Bp,) + cond.shape[1:], device=self.device)
+            sn = torch.zeros((Bp,) + noise.shape[1:], device=self.device)
+            s = torch.cuda.Stream()
+            s.wait_stream(torch.cuda.current_stream())
+            with torch.cuda.stream(s):
+                for _ in range(2):
+                    self.ddpm.ddim_sample(self.model, sc, sn.shape, self.ddim_steps, noise=sn)
+            torch.cuda.current_stream().wait_stream(s)
+            g = torch.cuda.CUDAGraph()
+            with torch.cuda.graph(g):
+                out = self.ddpm.ddim_sample(self.model, sc, sn.shape, self.ddim_steps, noise=sn)
+            self._graphs[Bp] = (g, sc, sn, out)
+        g, sc, sn, out = self._graphs[Bp]
+        sc.zero_(); sn.zero_()
+        sc[:B].copy_(cond); sn[:B].copy_(noise)
+        g.replay()
+        return out[:B].clone()
 
     @staticmethod
     def latest(run_dir):
@@ -53,7 +81,7 @@ class DiffusionPolicy:
         cond = torch.tensor(self.on.norm(O.astype(np.float32)).reshape(B, -1), device=self.device)
         noise = torch.stack([torch.randn((self.H, self.adim), generator=torch.Generator().manual_seed(
             int(s) * 100003 + int(c))) for s, c in zip(seeds, calls)]).to(self.device)
-        pred = self.ddpm.ddim_sample(self.model, cond, (B, self.H, self.adim), self.ddim_steps, noise=noise)
+        pred = self._sample(cond, noise)
         A = self.an.unnorm(pred.cpu().numpy())
         if self.relative:
             A[..., :3] += x_now[:, None, :]
