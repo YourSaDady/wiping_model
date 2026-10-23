@@ -50,8 +50,8 @@ class Renderer:
         sg.AddRenderer("vtk", MakeRenderEngineVtk(params))
         core = RenderCameraCore("vtk", CameraInfo(W, H, np.deg2rad(40)), ClippingRange(0.05, 10), RigidTransform())
         c = scene.arr("c")
-        eye = c + np.array([0.55, -0.75, 0.45])
-        X_WC = look_at(eye, c + np.array([0, 0, 0.08]))
+        eye = c + np.array([0.62, -0.38, 0.36])
+        X_WC = look_at(eye, c + np.array([-0.04, 0.0, 0.05]))
         self.sensor = b.AddSystem(RgbdSensor(SceneGraph.world_frame_id(), X_WC,
                                              DepthRenderCamera(core, DepthRange(0.05, 10))))
         b.Connect(sg.get_query_output_port(), self.sensor.query_object_input_port())
@@ -100,8 +100,8 @@ def main():
     t_end = args.t_end or max(t["samples"][-1, 0] for t in tr)
     times = np.arange(0, t_end, args.speed / args.fps)
     ncol = len(tr)
-    fig = plt.figure(figsize=(4.2 * ncol, 6.2), dpi=100)
-    gs = fig.add_gridspec(3, ncol, height_ratios=[3, 1.2, 1.6])
+    fig = plt.figure(figsize=(4.4 * ncol, 6.0), dpi=100)
+    gs = fig.add_gridspec(3, ncol, height_ratios=[3.2, 1.1, 1.5], hspace=0.45)
     axes = []
     for j, t in enumerate(tr):
         a_img = fig.add_subplot(gs[0, j]); a_img.axis("off")
@@ -122,9 +122,9 @@ def main():
         (tp,) = a_c.plot([], [], "o", color="#d1495b", ms=4)
         a_c.set_xlim(-2, t["scene"].L * 100 + 2); a_c.set_ylim(-2, t["scene"].L * 100 + 2)
         a_c.set_xlabel("u1 [cm]", fontsize=8); a_c.set_ylabel("u2 [cm]", fontsize=8); a_c.tick_params(labelsize=7)
-        txt = a_c.text(0.02, 1.02, "", transform=a_c.transAxes, fontsize=8)
+        txt = a_f.text(0.01, 1.04, "", transform=a_f.transAxes, fontsize=8, family="monospace")
         axes.append(dict(im=im, lf=lf, ci=ci, tp=tp, cov=cov, txt=txt, k=0))
-    fig.tight_layout()
+    fig.subplots_adjust(left=0.10, right=0.98, top=0.95, bottom=0.07, wspace=0.3)
     os.makedirs(os.path.dirname(args.out) or ".", exist_ok=True)
     writer = FFMpegWriter(fps=args.fps, bitrate=2400)
     with writer.saving(fig, args.out, dpi=100):
@@ -140,7 +140,7 @@ def main():
                 ax["lf"].set_data(S[:k + 1, 0], S[:k + 1, 4])
                 ax["ci"].set_data(ax["cov"].grid.T.astype(float))
                 ax["tp"].set_data([S[k, 1] * 100], [S[k, 2] * 100])
-                ax["txt"].set_text(f"t = {tt:5.1f} s   uncovered {ax['cov'].uncovered:.2f}   f_n {S[k, 4]:5.1f} N")
+                ax["txt"].set_text(f"t={tt:5.1f}s  f_n={S[k, 4]:5.1f}N  uncovered={ax['cov'].uncovered:.2f}")
             writer.grab_frame()
     print("wrote", args.out)
 
