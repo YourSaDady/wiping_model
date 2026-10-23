@@ -78,6 +78,13 @@ Command: `python scripts/phase1_checks.py --n 50` (≈ 12 min on 28 workers), th
 - tmux `sweep`: `xargs -P 3 -L 1 scripts/run_one.sh < scripts/sweep_list.txt` (train 40k steps →
   select checkpoint on val), logs `logs/sweep.log`, `logs/<run>_{train,select}.log`.
   Started 2026-10-23 09:52 UTC; expected ≈ 9–10 h. Resumable: rerun the same command.
+- tmux `evalq`: `scripts/eval_queue.sh` — final test evaluation (50 scenes × 17 tables): scripted
+  at K_n = 500/250/1000 and hybrid first, then each sweep run once its `selected.json` exists.
+  Results `results/raw/<method>_test.jsonl` (+ `_traces/` for the first 3 scenes per table, q
+  recorded for scene 0). Started 2026-10-23 09:59 UTC. Resumable.
+- Dev worktree `../6.4212-wiping-dev` (branch `dev`): stretch-goal code (pose+force label `pf`,
+  `--deploy-K`, label force noise/bias), P2 inertia diagnostic, P1/P3/P4 figure scripts. Merge
+  into master after the sweep (kept separate so running jobs never load half-edited code).
 
 ## Next
 

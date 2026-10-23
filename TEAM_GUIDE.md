@@ -132,7 +132,54 @@ Classical (Ch. 8, "hybrid position/force control"), at 1 kHz, torque level:
   k_e = 1e5. It is borderline on the OOD k_e = 3e5 table (≈ 20–22 N): the price of not
   knowing where the table is.
 
-## 9. Likely TA questions (answers to be completed with the final numbers)
+## 9. Diffusion Policy (`wipe/dp/`, `scripts/train_dp.py`)
+
+- **What it learns**: the distribution of an action chunk A_t = (a_t, …, a_{t+15}) given the
+  last 2 observations. Training: take a demo chunk A⁰, pick a diffusion step k ∈ {0..99}, add
+  noise A^k = sqrt(ᾱ_k) A⁰ + sqrt(1 − ᾱ_k) ε, and train the network ε_θ(A^k, k, O_t) to predict ε
+  (mean-squared error). Sampling: start from Gaussian noise and denoise with DDIM (16
+  deterministic steps), each step estimating A⁰ = (A^k − sqrt(1−ᾱ_k) ε_θ)/sqrt(ᾱ_k), clipping to
+  [−1, 1], and moving to the previous noise level.
+- **Why diffusion and not plain regression?** Demonstrations are multimodal (e.g. the speed v
+  varies between demos and is not observed); a regression head would average modes. BC notes §2.3.
+- **Network**: 1D temporal U-Net over the 16-step chunk (channels 256 → 512 → 1024, kernel 5,
+  GroupNorm + Mish), conditioned by FiLM: every residual block gets a per-channel scale and
+  bias computed from [diffusion-step embedding, flattened 2-frame observation].
+- **Noise schedule**: squared cosine (Nichol & Dhariwal), 100 steps.
+- **Action representation**: targets relative to the current ball position, a_j = target_{t+j} − x_t
+  (all labels identically). Execution: add x_t back, execute the first 8 targets (0.4 s), observe,
+  re-plan (receding horizon, BC notes §4.2–4.3).
+- **Normalization**: min-max to [−1, 1] using training windows only.
+- **EMA**: evaluation uses an exponential moving average of the weights (decay → 0.9999).
+- **Training**: AdamW 1e-4, batch 256, 40k steps, cosine LR with 500 warm-up; checkpoint chosen
+  by closed-loop success on 120 validation scenes (never test scenes).
+- **Pilot**: label (b) reached 120/120 validation scenes from 20k steps; relative vs absolute
+  targets tied in closed loop; at 10k steps a few rollouts skipped lanes (progress ambiguity:
+  with 2 frames the lane index must be inferred from position).
+
+## 10. Closed-loop evaluation (`wipe/evaluate.py`)
+
+- Lockstep: the policy runs on the GPU in the main process, batched over ~24 simulator worker
+  processes; each worker executes 8 targets (0.4 s of simulated time) per round.
+- Every episode runs the full T_MAX = 50 s (no early termination), so a policy that lifts early
+  or comes back down and slams the table is caught.
+- DDIM noise is seeded by (scene, inference call): every method sees the same noise on the same
+  scene → paired trials, reproducible regardless of batching.
+- Splits: `val` scenes (10/table) for checkpoint selection, `test` scenes (50/table) only for the
+  final numbers.
+
+## 11. Statistics (`wipe/stats.py`, BC notes §5.2)
+
+- Wilson 95 % interval for each success rate (better than the normal interval near 0 or 1).
+- Fisher's exact test for two success counts (conditional on the total successes, every
+  assignment of successes to trials is equally likely). Two-sided unless the direction was
+  fixed in advance. Checked against the notes' example: 7/10 vs 9/10 → p = 0.58.
+- McNemar's exact test when the same scenes are run by both methods (paired): only discordant
+  scenes (one succeeds, the other fails) carry information.
+- Holm–Bonferroni correction across the 6 label pairs.
+- Report effect sizes (success-rate differences with intervals), not only p-values.
+
+## 12. Likely TA questions
 
 - *Why does (a) lose force?* Springs in series: target at depth d_demo, tool settles at
   d_a with K(d_demo − d_a) = k_e d_a ⇒ f_a/f_demo = K/(K+k_e). Verified in Drake to within
@@ -143,3 +190,13 @@ Classical (Ch. 8, "hybrid position/force control"), at 1 kHz, torque level:
 - *Why table-frame gains?* See §3.
 - *Why Fisher / Wilson?* See the BC notes §5.2; we also report McNemar's exact test because
   all methods run the same test scenes (paired outcomes).
+- *Why does (c′) still differ from (b)?* It still drops the inertial term [Λẍ]: under the 20 Hz
+  zero-order hold the target jumps every 50 ms and the ≈ 9–18 kg effective mass accelerates
+  within each interval. On 9 demos, subtracting K⁻¹[Λa] measured at 1 kHz reduces the (c′)
+  sweep residual from 6.7 to 2.7 mm (`results/p2_inertia_check.py`).
+- *Why 2 observation frames?* DP default; velocity is observed directly, so 2 frames mostly
+  add the force trend.
+- *Why relative actions?* Pilot tie in success, lower action error, and invariance to region
+  position.
+- *How do you know it is not overfit to the test scenes?* Test scenes have their own seeds and
+  were run once, after all choices were frozen; checkpoints were chosen on validation scenes.
