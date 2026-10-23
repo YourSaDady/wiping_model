@@ -54,6 +54,74 @@ contributions, overlap disclosure, AI-use description (see `AI_USE.md`).
 - NN smoke test (val, K_n = 500): (a) 0, (b) 115, (c) 71, (c′) 90 of 120.
 - Baselines on val: scripted 170/170, hybrid 166/170 (OOD k_e = 3e5 impacts).
 
+## Final results (test split, 50 scenes × 17 tables per method; `results/table_main.py`)
+
+K_n = 500, DP rows pool seeds 0–2 (1800 ID / 750 OOD episodes); baselines 600 / 250.
+Full table with coverage, force and peaks: `results/tables/main_500.md`.
+
+| method | ID success [95 % CI] | OOD success [95 % CI] | ID mean f_n while wiping |
+|---|---|---|---|
+| scripted (privileged) | 100 % [99, 100] | 100 % [98, 100] | 8.92 N |
+| hybrid force/position | 100 % [99, 100] | 92 % [88, 95] (all 19 fails on k_e = 3e5) | 9.36 N |
+| DP (a) x | 0 % [0, 0] (0/1800) | 0 % [0, 1] | 0.47 N |
+| DP (b) x_d | 99.6 % [99, 100] (1792/1800) | 52 % [48, 56] | 9.03 N |
+| DP (c) x − K⁻¹f | 7 % [6, 8] (129/1800) | 4 % [3, 6] | 9.01 N |
+| DP (c′) x + K⁻¹(Dẋ − f) | 24 % [23, 26] (440/1800) | 28 % [25, 31] | 7.76 N |
+
+- Per seed (ID / OOD): (b) 0.997/0.548, 0.995/0.552, 0.995/0.460; (c) 0.065/0.036, 0.043/0.028, 0.107/0.064;
+  (c′) 0.197/0.300, 0.277/0.328, 0.260/0.204; (a) 0 everywhere.
+- All 6 label pairs differ on ID tables (Holm-corrected Fisher p ≤ 3e-40, McNemar seed 0 p ≤ 1e-11); on OOD tables all pairs p ≤ 0.004 — `results/tables/label_tests_500.csv`.
+- Controller-stiffness sweep, seed 0, ID success (`results/tables/ksweep_success.csv`):
+
+| label | K_n = 250 | 500 | 1000 |
+|---|---|---|---|
+| (a) | 0/600 | 0/600 | 0/600 |
+| (b) | 598/600 | 598/600 | 599/600 |
+| (c) | 1/600 | 39/600 | 460/600 |
+| (c′) | 301/600 | 118/600 | 195/600 |
+
+  OOD (seed 0): (b) 96 / 137 / 202 of 250; (c) 0 / 9 / 51; (c′) 43 / 75 / 73.
+
+### P1 (`results/fig_p1_force_ratio.py`, `results/tables/p1_force_ratio.csv`)
+- Open loop (Phase 1 replay): (a) keeps K/(K+k_e) of the force on soft tables (0.494 vs 0.500; 0.199 vs 0.200; K_n = 1000: 0.662 vs 0.667).
+- Closed loop, K_n = 500, ID: policy/expert force ratio of (a) = 0.078, 0.068, 0.033, 0.031 at k_e = 500, 2e3, 2e4, 1e5 vs predicted 0.50, 0.20, 0.024, 0.005.
+  (a) never succeeds on any table at any K_n, including where K/(K+k_e)·f_des ≥ f_min (k_e = 500 at K_n = 500/1000).
+  Reason: (a) hardly reaches the table (P4), so the static two-spring bound is not what limits it in closed loop.
+- (b) keeps 101 % of the expert's force at every K_n; (c) 101–103 % at K_n = 500/1000 once in contact
+  (5.5 % at K_n = 250, where it barely touches); (c′) 85–89 %.
+
+### P2 (`results/p2_label_gap.py`, `results/p2_inertia_check.py`, `results/p2_velocity_gain.py`, `results/fig_p2_closed_loop.py`)
+- Offline gap (c) − (b) in straight sweeps: 6.3 → 13.7 mm for 4.6 → 12.5 cm/s ≈ D_t v/K_t (dropped damping).
+  (c′) 3.4–5.2 mm; the remainder is mostly inertia K⁻¹[Λa] under the 20 Hz hold (6.66 → 2.74 mm after subtracting it, 9 demos).
+- Closed loop: (c) and (c′) fail for *different* reasons than the offline gap suggests:
+  - (c): free-space problem (P4) — first contact 24.9 s after the expert (median), runs out of time.
+  - (c′): reaches the table on time, but the policy feeds its observed velocity into the target:
+    G_n = 0.325 s vs D_n/K_n = 0.5 s ((b): 0.149 s), leaving 87 N·s/m of the controller's 250 N·s/m normal damping
+    ((b): 175). Same at every K_n (G_n/(D_n/K_n) ≈ 0.65–0.75). Effects: force chatter on stiff tables
+    (peaks 19–50 N; 351/850 episodes > 20 N for seed 0) and overshoot / lost lanes in the plane.
+  - Velocity gains are reproducible across seeds (G_n (c′) = 0.325 / 0.326 / 0.327 s).
+
+### P3 (`results/p3_steady_spread.py` main; `results/fig_p3_force_spread.py` supplementary)
+- The whole-episode force std (≈ 2.7 N for every method, incl. the expert) is dominated by onset/lift ramps → not informative.
+- Steady-wiping std of f_n grows with table stiffness within every K_n for (b), (c), (c′) and the expert
+  (Spearman with K_eff within K_n: (b) +0.56/+0.64/+0.64, (c) +0.75/+0.84, (c′) +0.84/+0.80/+0.76);
+  the hybrid controller (force feedback) is flat (−0.03).
+  K_n = 500, (b): 0.22–0.32 N (k_e ≤ 2e3) → 0.39–0.54 N (k_e ≥ 2e4); (c′): 1.1–1.4 → 2.2–2.6 N.
+- But the spread keeps rising from k_e = 2e4 to 3e5 where K_eff is already saturated at K → contact dynamics on stiff
+  surfaces matter beyond the quasi-static K_eff·δ model. Offline one-step target errors (σ_δ ≈ 0.1–0.5 mm,
+  `scripts/action_spread.py`) predict only ≈ 0.1–0.2 N. Verdict: direction supported, magnitude/mechanism not.
+
+### P4 (`results/fig_p4_contact_ood.py`, `results/fig_p4_approach.py`, `results/fig_p4_tilt28_paths.py`)
+- Does (c) reach the table? Yes in 99.7 % of ID episodes, but late: median 24.9 s after the expert; approach speed
+  1.4 mm/s (30 → 5 mm above surface) vs 13.3 mm/s for the expert. (a): 1.9 mm/s, 94 % ever touch, 5 % ever press ≥ f_min.
+  (b) and (c′) approach like the expert (13.4 and 15.8 mm/s). The (c) deficit shrinks with K_n (lead ∝ D/K):
+  ID success 0.2 % / 6.5 % / 77 % at K_n = 250 / 500 / 1000.
+- Steeper unseen tilt (28°): (b) 0/150 on both 28° tables (3 seeds); (c′) 24–31 %; (a), (c) 0 %; scripted and hybrid 100 %.
+  (b) presses correctly along the true normal (offset −20.3 mm, same as on 20°) but its commanded lead up the slope
+  drops from +1.3 mm (20°, = expert) to −0.4…+0.5 mm, so it never steps to the next lane and wipes 1–8 cm *below* the
+  region (`results/tables/p4_tilt28_u2.csv`).
+- Other OOD tables for (b): softer k_e = 250: 99 %; 15°/5e4: 86 %; harder 3e5: 75 % (scripted 100 %, hybrid 62 %).
+
 ## Figures (script → file)
 
 | figure | script | file |
@@ -61,9 +129,14 @@ contributions, overlap disclosure, AI-use description (see `AI_USE.md`).
 | Label replays, force vs time | `results/fig_phase1_replay_force.py` | `results/figures/phase1_replay_force.png` |
 | P2 label gap by phase and speed | `results/p2_label_gap.py` | `results/figures/p2_label_gap.png` |
 | P1 force ratio, success vs k_e | `results/fig_p1_force_ratio.py` | `results/figures/p1_force_ratio.png` |
-| P3 force spread vs K_eff | `results/fig_p3_force_spread.py` | `results/figures/p3_force_spread.png` |
+| P2 closed loop, velocity gain, K sweep | `results/fig_p2_closed_loop.py` | `results/figures/p2_closed_loop.png` |
+| P3 steady force spread vs k_e (main) | `results/p3_steady_spread.py` | `results/figures/p3_steady_spread.png` |
+| P3 whole-episode spread (supplementary) | `results/fig_p3_force_spread.py` | `results/figures/p3_force_spread.png` |
+| P4 approach trajectories | `results/fig_p4_approach.py` | `results/figures/p4_approach.png` |
+| P4 paths on 28° tables | `results/fig_p4_tilt28_paths.py` | `results/figures/p4_tilt28_paths.png` |
 | P4 contact and OOD | `results/fig_p4_contact_ood.py` | `results/figures/p4_contact_ood.png` |
-| Main table | `results/table_main.py` | `results/tables/main_500.md` |
+| Main tables (K_n = 500, 250, 1000) | `results/table_main.py --K {500,250,1000}` | `results/tables/main_{K}.md` |
+| Rollout videos | `results/make_videos.sh` | `results/videos/*.mp4` |
 
 ## Limitations to discuss (facts)
 
