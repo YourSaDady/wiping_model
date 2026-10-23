@@ -24,7 +24,7 @@ from wipe.dp.model import ConditionalUnet1D
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--label", required=True, choices=["a", "b", "c", "cp"])
+    ap.add_argument("--label", required=True, choices=["a", "b", "c", "cp", "pf"])
     ap.add_argument("--K", type=int, default=500)
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--out", required=True)
@@ -43,6 +43,8 @@ def main():
     ap.add_argument("--eval-every", type=int, default=5000)
     ap.add_argument("--ddim-steps", type=int, default=16)
     ap.add_argument("--obs-version", type=int, default=1)
+    ap.add_argument("--label-f-noise", type=float, default=0.0, help="std [N] of noise on the force inside the label")
+    ap.add_argument("--label-f-bias", type=float, default=0.0, help="bias [N] along n on the force inside the label")
     args = ap.parse_args()
 
     os.makedirs(args.out, exist_ok=True)
@@ -52,8 +54,11 @@ def main():
     tables = [t.name for t in TRAIN_TABLES if not args.tables or t.name in args.tables.split(",")]
     tr_paths, va_paths = split_paths(args.K, tables, args.n_train, args.n_val)
     rel = not args.abs
-    O, A, _ = build_windows(tr_paths, args.label, args.K, args.To, args.H, rel, args.obs_version)
-    Ov, Av, _ = build_windows(va_paths, args.label, args.K, args.To, args.H, rel, args.obs_version)
+    nz = dict(f_noise_sigma=args.label_f_noise, f_noise_bias=args.label_f_bias)
+    O, A, _ = build_windows(tr_paths, args.label, args.K, args.To, args.H, rel, args.obs_version,
+                            noise_seed=1000 + args.seed, **nz)
+    Ov, Av, _ = build_windows(va_paths, args.label, args.K, args.To, args.H, rel, args.obs_version,
+                              noise_seed=2000 + args.seed, **nz)
     on, an = Normalizer.fit(O), Normalizer.fit(A)
     cfg = dict(vars(args), relative=rel, obs_norm=on.state_dict(), act_norm=an.state_dict(),
                n_train_windows=len(O), n_val_windows=len(Ov), train_paths=tr_paths, val_paths=va_paths)
@@ -64,7 +69,8 @@ def main():
     Ovt = torch.tensor(on.norm(Ov).reshape(len(Ov), -1), device=dev)
     Avt = torch.tensor(an.norm(Av), device=dev)
     dims = tuple(int(d) for d in args.down_dims.split(","))
-    model = ConditionalUnet1D(3, Ot.shape[1], down_dims=dims).to(dev)
+    adim = At.shape[-1]
+    model = ConditionalUnet1D(adim, Ot.shape[1], down_dims=dims).to(dev)
     ema = EMA(model)
     ddpm = DDPM(100, dev)
     opt = torch.optim.AdamW(model.parameters(), lr=args.lr, betas=(0.95, 0.999), weight_decay=args.wd)
@@ -87,15 +93,15 @@ def main():
     v_noise = torch.randn(Avt[vi].shape, generator=g, device=dev)
     v_t = torch.randint(0, 100, (len(vi),), generator=g, device=dev)
     si = vi[:1024]
-    s_noise = torch.randn((len(si), args.H, 3), generator=g, device=dev)
+    s_noise = torch.randn((len(si), args.H, adim), generator=g, device=dev)
 
     def evaluate():
         m = ema.model
         with torch.no_grad():
             vl = torch.nn.functional.mse_loss(m(ddpm.add_noise(Avt[vi], v_noise, v_t), v_t, Ovt[vi]), v_noise).item()
-            pred = ddpm.ddim_sample(m, Ovt[si], (len(si), args.H, 3), args.ddim_steps, noise=s_noise)
-        pa = an.unnorm(pred.cpu().numpy())
-        ta = an.unnorm(Avt[si].cpu().numpy())
+            pred = ddpm.ddim_sample(m, Ovt[si], (len(si), args.H, adim), args.ddim_steps, noise=s_noise)
+        pa = an.unnorm(pred.cpu().numpy())[..., :3]       # position part
+        ta = an.unnorm(Avt[si].cpu().numpy())[..., :3]
         err = np.linalg.norm(pa[:, :8] - ta[:, :8], axis=-1)       # executed part of the chunk
         return vl, float(1e3 * err[:, 0].mean()), float(1e3 * err.mean())
 

@@ -12,7 +12,7 @@ import numpy as np
 
 from ..config import GAINS_BY_KN
 from ..data import load_episode, obs_vector
-from ..labels import make_labels
+from ..labels import corrupt_force, make_labels
 
 
 class Normalizer:
@@ -43,12 +43,15 @@ class Normalizer:
         return Normalizer(d["lo"], d["hi"])
 
 
-def episode_arrays(ep, label: str, K_n: int, obs_version: int = 1):
+def episode_arrays(ep, label: str, K_n: int, obs_version: int = 1, f_noise=None):
+    """f_noise = (sigma, bias, rng) corrupts only the force used inside the label
+    (stretch study); the observation always sees the true force."""
     sc = ep["scene"]
     g = GAINS_BY_KN[K_n]
     n = sc.arr("n")
     obs = obs_vector(ep["x"], ep["xdot"], ep["f"], sc, ep["u"], obs_version)   # (T+1, D)
-    lab = make_labels(ep["x"], ep["xdot"], ep["f"], ep["x_d"], g.K(n), g.D(n), label)   # (T, 3)
+    f_lab = ep["f"] if f_noise is None else corrupt_force(ep["f"], n, *f_noise)
+    lab = make_labels(ep["x"], ep["xdot"], f_lab, ep["x_d"], g.K(n), g.D(n), label)   # (T, 3) or (T, 9)
     return obs.astype(np.float32), lab.astype(np.float32)
 
 
@@ -60,16 +63,20 @@ def make_windows(obs, lab, x, To=2, H=16, relative=True):
     ai = np.clip(t[:, None] + np.arange(H)[None, :], None, T - 1)
     O = obs[oi]
     A = lab[ai]
-    if relative:
-        A = A - x[t][:, None, :]
+    if relative:                      # only the position part of a label is made relative
+        A = A.copy()
+        A[..., :3] -= x[t][:, None, :]
     return O.astype(np.float32), A.astype(np.float32)
 
 
-def build_windows(paths, label: str, K_n: int, To=2, H=16, relative=True, obs_version: int = 1):
+def build_windows(paths, label: str, K_n: int, To=2, H=16, relative=True, obs_version: int = 1,
+                  f_noise_sigma: float = 0.0, f_noise_bias: float = 0.0, noise_seed: int = 0):
     Os, As, meta = [], [], []
+    noisy = f_noise_sigma > 0 or f_noise_bias != 0
     for ei, p in enumerate(paths):
         ep = load_episode(p)
-        obs, lab = episode_arrays(ep, label, K_n, obs_version)
+        fn = (f_noise_sigma, f_noise_bias, np.random.default_rng([noise_seed, ei])) if noisy else None
+        obs, lab = episode_arrays(ep, label, K_n, obs_version, fn)
         O, A = make_windows(obs, lab, ep["x"], To, H, relative)
         Os.append(O)
         As.append(A)

@@ -13,9 +13,11 @@ import os
 import numpy as np
 import torch
 
+from .config import GAINS_BY_KN
 from .dp.dataset import Normalizer, build_windows
 from .dp.diffusion import DDPM
 from .dp.model import ConditionalUnet1D
+from .labels import rebuild_target
 
 
 class DiffusionPolicy:
@@ -26,7 +28,10 @@ class DiffusionPolicy:
         self.To, self.H, self.relative = self.cfg["To"], self.cfg["H"], self.cfg["relative"]
         self.obs_version = self.cfg.get("obs_version", 1)
         dims = tuple(int(d) for d in self.cfg["down_dims"].split(","))
-        self.model = ConditionalUnet1D(3, len(self.on.lo) * self.To, down_dims=dims).to(device).eval()
+        self.adim = len(self.an.lo)
+        self.label = self.cfg["label"]
+        self.deploy_gains = GAINS_BY_KN[self.cfg["K"]]    # gains used to rebuild "pf" targets
+        self.model = ConditionalUnet1D(self.adim, len(self.on.lo) * self.To, down_dims=dims).to(device).eval()
         ckpt = ckpt or self.latest(run_dir)
         self.model.load_state_dict(torch.load(ckpt, map_location=device, weights_only=False)["ema"])
         self.ckpt = ckpt
@@ -46,11 +51,16 @@ class DiffusionPolicy:
         not depend on how environments are batched."""
         B = len(O)
         cond = torch.tensor(self.on.norm(O.astype(np.float32)).reshape(B, -1), device=self.device)
-        noise = torch.stack([torch.randn((self.H, 3), generator=torch.Generator().manual_seed(
+        noise = torch.stack([torch.randn((self.H, self.adim), generator=torch.Generator().manual_seed(
             int(s) * 100003 + int(c))) for s, c in zip(seeds, calls)]).to(self.device)
-        pred = self.ddpm.ddim_sample(self.model, cond, (B, self.H, 3), self.ddim_steps, noise=noise)
+        pred = self.ddpm.ddim_sample(self.model, cond, (B, self.H, self.adim), self.ddim_steps, noise=noise)
         A = self.an.unnorm(pred.cpu().numpy())
-        return A + x_now[:, None, :] if self.relative else A
+        if self.relative:
+            A[..., :3] += x_now[:, None, :]
+        if self.label == "pf":            # rebuild targets with the deployment gains, in each table's frame
+            g = self.deploy_gains
+            A = np.stack([rebuild_target(A[i], g.K(O[i, -1, 13:16]), g.D(O[i, -1, 13:16])) for i in range(B)])
+        return A
 
 
 class NearestNeighborPolicy:
