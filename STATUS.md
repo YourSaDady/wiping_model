@@ -14,11 +14,11 @@ Tang, Linda Yinghui He, Yichuan Song). Due Dec 2, 2026; all of Phase 5 by Nov 24
 | 0 Setup | done 2026-10-23 | venv (Py 3.12, drake 1.58.0, torch 2.11 cu128), git repo, 32 CPUs, A6000 48 GB |
 | 1 Environment + expert | done 2026-10-23 | all checks pass, see below |
 | 2 Data + NN smoke test | done 2026-10-23 | 3 × 432 demos, all expert episodes succeeded; NN smoke test (b) 115, (c′) 90, (c) 71, (a) 0 of 120 |
-| 3 Diffusion Policy | pilot done, sweep running | pilot (b) 120/120 val; 20-run sweep in tmux `sweep` |
-| 4 Baselines | working on val; final eval pending | val: scripted 170/170, hybrid 166/170 (4 fails on OOD k_e = 3e5, impact ≈ 21 N) |
-| 5 Evaluation + P1–P4 | not started | |
-| 6 Stretch | not started | |
-| 7 Write-up material | not started | |
+| 3 Diffusion Policy | done 2026-10-23 21:36 | 20 policies trained + selected on val (`runs/*/selected.json`) |
+| 4 Baselines | done 2026-10-23 | test: scripted 850/850, hybrid ID 600/600, OOD 231/250 |
+| 5 Evaluation + P1–P4 | done 2026-10-23 (time-limit sensitivity running) | see "Phase 5 results" and REPORT_NOTES.md |
+| 6 Stretch | training (tmux `stretch`) | |
+| 7 Write-up material | in progress | videos rendered; notes, guide, AI log drafted |
 
 ## Phase 1 results (2026-10-23)
 
@@ -121,7 +121,29 @@ Command: `python scripts/phase1_checks.py --n 50` (≈ 12 min on 28 workers), th
   (a) 0.01 mm. K_eff·σ_δ ≈ 0.1–0.2 N, far below the measured closed-loop spread (≈ 2.7 N, same as
   the expert): one-step action error is not what sets the force spread.
 
+## Phase 5 results (final test split, 2026-10-23 22:45)
+
+All numbers and the analysis are in `REPORT_NOTES.md` ("Final results"); tables in
+`results/tables/`, figures in `results/figures/`. Headline (K_n = 500, 3 seeds pooled, ID / OOD):
+scripted 100 / 100 %, hybrid 100 / 92 %, DP (a) 0 / 0 %, (b) 99.6 / 52 %, (c) 7 / 4 %, (c′) 24 / 28 %.
+- P1: open-loop replay matches K/(K+k_e); closed-loop (a) presses 3–8 % of the expert force on every table
+  and never succeeds — it barely reaches the table (P4), so the springs-in-series bound is not the limit.
+- P2: (c) and (c′) both lose to (b), for different reasons: (c) free-space lead missing (contact 25 s late);
+  (c′) feeds observed velocity into the target (G_n 0.33 s of D_n/K_n = 0.5 s) → loses 2/3 of the normal
+  damping → force chatter on stiff tables. (c) improves to 77 % at K_n = 1000 (lead ∝ D/K).
+- P3: steady-wiping force spread grows with table stiffness within every K_n (Spearman +0.56…+0.84) but keeps
+  growing where K_eff has saturated → contact dynamics matter beyond K_eff·δ; hybrid flat.
+- P4: (c) reaches the table in 99.7 % of episodes but at 1.4 mm/s; on 28° tables (b) fails 0/150 (drifts below
+  the region; in-plane lead up the slope collapses), (c′) 24–31 %, baselines 100 %.
+- Commands: `python results/table_main.py --K {500,250,1000}`, `results/fig_p1_force_ratio.py`,
+  `results/fig_p2_closed_loop.py`, `results/p3_steady_spread.py`, `results/fig_p3_force_spread.py`,
+  `results/fig_p4_contact_ood.py`, `results/fig_p4_approach.py`, `results/fig_p4_tilt28_paths.py`,
+  `python results/p2_velocity_gain.py --runs <all 20 runs>`, `scripts/action_spread.py --run <run>`,
+  `bash results/make_videos.sh`.
+
 ## Next
 
-1. When the sweep finishes: check every run's `selected.json`; run `scripts/action_spread.py` per run.
-2. Phase 5 final evaluation on test scenes (all methods, 50 scenes × 17 tables), then P1–P4.
+1. Time-limit sensitivity (tmux `extra`) → add to REPORT_NOTES.
+2. Stretch results (tmux `stretch`): pf label at K′, force noise/bias → analysis script + notes.
+3. Phase 7: storyboard, TEAM_GUIDE Q&A with final numbers, AI_USE, TA check-in notes.
+4. Pending team decision: optional inertia-corrected (c″) diagnostic.
