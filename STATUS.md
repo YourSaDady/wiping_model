@@ -99,6 +99,20 @@ Command: `python scripts/phase1_checks.py --n 50` (≈ 12 min on 28 workers), th
   (19 fails on k_e = 3e5, impact peaks ≤ 22.1 N); scripted K250 fails 46/50 on k_e = 3e5 (only used
   as the P1 reference on training tables), scripted K1000 850/850.
 
+## Findings so far (seed 0, validation unless noted; 2026-10-23 13:30)
+
+- Val selection: K500 (a) 0, (b) 120, (c) 6, (c′) 24 of 120; K250 (a) 0 (never touches the table
+  in 50 s), (b) 120.
+- Test (final, seed 0, K500): (a) 0/850; (b) ID 598/600, OOD 137/250 (0/50 on both 28° tables,
+  40/50 on k_e = 3e5, 47/50 on 15°/5e4); (c) 48/850 (142 peaks > 20 N).
+- **(c′) mechanism** (`results/p2_velocity_gain.py`, `results/tables/p2_velocity_gain.csv`): the
+  policy's commanded lead depends on the *observed* velocity with gain G_n = 0.325 s along n
+  ((b): 0.149 s; D_n/K_n = 0.5 s), so it cancels ≈ 2/3 of the controller's normal damping (net
+  88 vs 175 N·s/m for (b)) → force chatter on stiff tables (≈ 28–35 N peaks on k_e = 1e5) and
+  lane-end overshoot in the plane (G_t = 0.164 vs 0.145 s, D_t/K_t = 0.11 s). The (c′) label
+  contains D ẋ/K explicitly; the policy reproduces that correlation with its own velocity.
+  (c′) does fix the free-space problem: first contact ≈ 4.0 s like the expert.
+
 ## Next
 
 1. When the sweep finishes: check every run's `selected.json`; run `scripts/action_spread.py` per run.
