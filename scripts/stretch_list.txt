@@ -1,0 +1,7 @@
+- pf 500 0
+- pf 500 1
+- pf 500 2
+_fn1 c 500 0 --label-f-noise 1.0
+_fn3 c 500 0 --label-f-noise 3.0
+_fbp2 c 500 0 --label-f-bias 2.0
+_fbm2 c 500 0 --label-f-bias -2.0

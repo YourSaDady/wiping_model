@@ -96,3 +96,12 @@ Cartesian stiffness control in operational-space form (Ch. 8), our own `LeafSyst
 | Runs | K_n = 500: 4 labels × seeds {0, 1, 2}; K_n = 250 and 1000: 4 labels × seed 0 (20 runs, `scripts/sweep_list.txt`) | Brief. |
 | DDIM noise at evaluation | Initial noise seeded by (scene seed, inference-call index) | Every policy sees the same noise on the same scene, results do not depend on batching, and trials are paired across methods. |
 | Train / val demos | Per table: first 32 kept demos train, next 4 validate (by episode) | 384 train / 48 val episodes per K. |
+
+## Stretch goals (Phase 6), queued 2026-10-23
+
+| Item | Choice | Reason |
+|---|---|---|
+| Pose + force label `pf` | Per step (x_{k+1}, ẋ_{k+1}, f_{k+1}) (9 numbers; position part relative to x_t). At deployment a controller with gains (K′, D′) rebuilds x_d = x̂ + K′⁻¹(D′ x̂̇ − f̂) in the table frame | Brief: include the damping term (without it the label has (c)'s free-space problem). With K′ = K it equals (c′) exactly (`tests/test_core.py`). |
+| pf experiment | Train on K_n = 500 demos, 3 seeds; deploy at K′ ∈ {500, 250, 1000} on all test scenes. Compare with (b), (c′) K_n = 500 seed 0 deployed at the mismatched K′ = 250, 1000, and with the policies trained natively at K′ (K sweep) | Tests whether a stiffness-agnostic label transfers to a new controller stiffness. D′ = D (D is the same for every K in our design). |
+| Force-sensor corruption | Label (c) only, K_n = 500 seed 0: iid Gaussian noise σ ∈ {1, 3} N per axis, or a constant bias b ∈ {+2, −2} N along n, applied to the force inside the label; the observation keeps the true force | Brief: "noise and bias on the force used for label (c)". Prediction: bias shifts the target by b/K along n → force ≈ f_des + b·K_eff/K; zero-mean noise largely averages out in the learned mean. |
+| Queue | `scripts/stretch_queue.sh` (tmux `stretch`), starts after the 20 main runs finish training | Keeps the main sweep's GPU budget first. |
