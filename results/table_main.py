@@ -22,6 +22,15 @@ def fmt_rate(r):
     return f"{100*r.rate:.0f}% [{100*r.lo:.0f}, {100*r.hi:.0f}] ({int(r.k)}/{int(r.n)})"
 
 
+def fmt_tests(t):
+    t = t.copy()
+    for c in [c for c in t.columns if c.endswith("_p") or "_p_" in c or c.endswith("_seed0")]:
+        t[c] = t[c].map(lambda p: f"{p:.1e}" if p < 1e-3 else f"{p:.3f}")
+    for c in ("succ_A", "succ_B"):
+        t[c] = t[c].map(lambda v: f"{v:.3f}")
+    return t.to_markdown(index=False)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--K", type=int, default=500)
@@ -37,7 +46,8 @@ def main():
     per = success_table(df, ["method_group", "table"])
     per.to_csv(f"results/tables/per_table_{args.K}.csv", index=False)
     # per-seed success for the DP rows
-    seeds = df[df.family == "dp"].groupby(["label", "seed", "dist"]).success.mean().unstack("dist")
+    seeds = df[df.family == "dp"].assign(seed=lambda d: d.seed.astype(int)).groupby(
+        ["label", "seed", "dist"]).success.mean().unstack("dist")
 
     tests = []
     dp = df[df.family == "dp"]
@@ -81,7 +91,7 @@ def main():
         lines.append("| " + " | ".join(cells) + " |")
     lines += ["", "DP rows pool 3 seeds × 50 scenes × tables. Wilson 95 % intervals. Mean f_n ± mean within-episode std "
               "over wiping samples.", "", "## Per-seed DP success", "", seeds.round(3).to_markdown(), "",
-              "## Label tests", "", tests.round(4).to_markdown(index=False) if len(tests) else "(none)"]
+              "## Label tests", "", fmt_tests(tests) if len(tests) else "(none)"]
     open(f"results/tables/main_{args.K}.md", "w").write("\n".join(lines) + "\n")
     print("\n".join(lines))
 
