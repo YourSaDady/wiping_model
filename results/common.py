@@ -49,6 +49,6 @@ def success_table(df, by):
                 peak_max=("peak_fn", "max")).reset_index()
     ci = [wilson(int(k), int(n)) for k, n in zip(out.k, out.n)]
     out["rate"] = out.k / out.n
-    out["lo"] = [c[0] for c in ci]
-    out["hi"] = [c[1] for c in ci]
+    out["lo"] = np.minimum([c[0] for c in ci], out.rate)     # guard float round-off at 0 and 1
+    out["hi"] = np.maximum([c[1] for c in ci], out.rate)
     return out
