@@ -113,6 +113,14 @@ Command: `python scripts/phase1_checks.py --n 50` (≈ 12 min on 28 workers), th
   contains D ẋ/K explicitly; the policy reproduces that correlation with its own velocity.
   (c′) does fix the free-space problem: first contact ≈ 4.0 s like the expert.
 
+- Val selection (all seed 0): K250 (c) 0, (c′) 63; K1000 (a) 0, (b) 120, (c) 91, (c′) 36 of 120.
+  (c) improves sharply with controller stiffness (0 / 6 / 91 at K_n = 250 / 500 / 1000), consistent
+  with its free-space lead deficit scaling with D/K (1 / 0.5 / 0.25 s).
+- P3 action spread (`scripts/action_spread.py`, val demos, sweep, std of n·(â₀ − a₀)): (b) 0.48 /
+  0.24 / 0.12 mm at K_n = 250 / 500 / 1000 (≈ constant 0.12 N in force units); (c), (c′) 0.10–0.37 mm;
+  (a) 0.01 mm. K_eff·σ_δ ≈ 0.1–0.2 N, far below the measured closed-loop spread (≈ 2.7 N, same as
+  the expert): one-step action error is not what sets the force spread.
+
 ## Next
 
 1. When the sweep finishes: check every run's `selected.json`; run `scripts/action_spread.py` per run.
