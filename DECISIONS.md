@@ -105,3 +105,10 @@ Cartesian stiffness control in operational-space form (Ch. 8), our own `LeafSyst
 | pf experiment | Train on K_n = 500 demos, 3 seeds; deploy at K′ ∈ {500, 250, 1000} on all test scenes. Compare with (b), (c′) K_n = 500 seed 0 deployed at the mismatched K′ = 250, 1000, and with the policies trained natively at K′ (K sweep) | Tests whether a stiffness-agnostic label transfers to a new controller stiffness. D′ = D (D is the same for every K in our design). |
 | Force-sensor corruption | Label (c) only, K_n = 500 seed 0: iid Gaussian noise σ ∈ {1, 3} N per axis, or a constant bias b ∈ {+2, −2} N along n, applied to the force inside the label; the observation keeps the true force | Brief: "noise and bias on the force used for label (c)". Prediction: bias shifts the target by b/K along n → force ≈ f_des + b·K_eff/K; zero-mean noise largely averages out in the learned mean. |
 | Queue | `scripts/stretch_queue.sh` (tmux `stretch`), starts after the 20 main runs finish training | Keeps the main sweep's GPU budget first. |
+
+## Secondary analyses (added after seeing validation results)
+
+| Item | Choice | Reason |
+|---|---|---|
+| Time-limit sensitivity | Seed-0 K_n = 500 policies of every label re-run on the training-table test scenes with T_MAX = 100 s (`scripts/extra_queue.sh`, method names `*_T100`). Reported separately; the primary metric keeps T_MAX = 50 s | Validation showed label (c) reaching the table with median first contact ≈ 29.5 s (expert ≈ 4 s) and running out of time with ≈ 38 % uncovered. The longer limit separates "too slow" from "wrong force". Decided before looking at any test result. |
+| Approach figure | `results/fig_p4_approach.py`: ball height vs time from the saved traces | Shows the creeping approach of (a)/(c) directly. |
