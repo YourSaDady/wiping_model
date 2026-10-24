@@ -252,3 +252,11 @@ OOD: 5 tables × 50 × 3 = 750): scripted 100 / 100 %, hybrid 100 / 92 %, (a) 0 
   from 6.5 % to 82 % (seed 0, 600 ID scenes), the rest failing on onset force peaks > 20 N. So (c) has the
   right contact force but approaches ≈ 10× too slowly. (a) stays at 0 % (never presses), (c′) stays at 20 %
   (its failures are force chatter and lost lanes), (b) stays at 99.5 %.
+- *Stretch: does a pose+force label transfer to a new controller stiffness?* The force level does:
+  rebuilding x_d = x̂ + K′⁻¹(D′x̂̇ − f̂) gives 8.0 N at K′ = 250, 500 and 1000, whereas (b) trained at 500 gives
+  3.6 / 9.0 / 17.3 N (springs again). But because the rebuild includes D·x̂̇ it inherits (c′)'s damping
+  cancellation, so success stays ≈ 30 %. A policy trained natively at each K′ on (b) is ≈ 100 %.
+- *Stretch: force-sensor bias in label (c)?* Bias b shifts the target by b/K along n. +2 N → presses ≈ 2 N
+  harder (11.3 N) *and* gets a 4 mm free-space lead (first contact 6 s instead of 29 s); −2 N → the target sits
+  4 mm above the tool before contact and the policy never touches the table (0 %). Zero-mean noise (σ = 1, 3 N)
+  lowered the force slightly and made some episodes never touch.

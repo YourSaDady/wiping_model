@@ -17,7 +17,7 @@ Tang, Linda Yinghui He, Yichuan Song). Due Dec 2, 2026; all of Phase 5 by Nov 24
 | 3 Diffusion Policy | done 2026-10-23 21:36 | 20 policies trained + selected on val (`runs/*/selected.json`) |
 | 4 Baselines | done 2026-10-23 | test: scripted 850/850, hybrid ID 600/600, OOD 231/250 |
 | 5 Evaluation + P1–P4 | done 2026-10-23 (time-limit sensitivity running) | see "Phase 5 results" and REPORT_NOTES.md |
-| 6 Stretch | training (tmux `stretch`) | |
+| 6 Stretch | done 2026-10-24 06:52 | pf transfers force across K′ (8.0 N at all three) but success ≈ 30 %; bias −2 N on (c) never touches |
 | 7 Write-up material | in progress | videos rendered; notes, guide, AI log drafted |
 
 ## Phase 1 results (2026-10-23)
@@ -145,7 +145,7 @@ scripted 100 / 100 %, hybrid 100 / 92 %, DP (a) 0 / 0 %, (b) 99.6 / 52 %, (c) 7 
 
 1. Time-limit sensitivity: done 2026-10-24 02:18 — T_MAX 100 s: (a) 0 %, (b) 99.5 %, (c) 82.3 % (from 6.5 %),
    (c′) 19.5 % (unchanged). (c) is right-force-but-slow; (a) never presses; (c′) fails in contact.
-2. Stretch results (tmux `stretch`): pf label at K′, force noise/bias → analysis script + notes.
+2. Stretch results: done (REPORT_NOTES "Stretch goals"; `python results/stretch_analysis.py`).
 3. Phase 7: storyboard, TEAM_GUIDE Q&A with final numbers, AI_USE, TA check-in notes.
 4. (c″) diagnostic: not added (team decision 2026-10-24); report (c′) with the velocity-gain analysis.
 

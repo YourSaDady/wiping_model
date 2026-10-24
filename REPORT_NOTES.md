@@ -129,6 +129,22 @@ Full table with coverage, force and peaks: `results/tables/main_500.md`.
   region (`results/tables/p4_tilt28_u2.csv`).
 - Other OOD tables for (b): softer k_e = 250: 99 %; 15°/5e4: 86 %; harder 3e5: 75 % (scripted 100 %, hybrid 62 %).
 
+### Stretch goals (`results/stretch_analysis.py`, `results/tables/stretch_pf.csv`, `results/tables/stretch_noise.csv`, `results/figures/stretch.png`)
+1. Stiffness transfer — policies trained on K_n = 500 demos, deployed with a controller of stiffness K′ (test, ID):
+   - (b) trained at 500: mean wiping force 3.6 / 9.0 / 17.3 N at K′ = 250 / 500 / 1000 → success 0 / 99.7 / 1.5 %
+     (548/600 episodes exceed 20 N at K′ = 1000). (c′) likewise: 3.6 / 7.8 / 18.5 N → 0 / 19.7 / 0 %. The force follows
+     the 1-D model (targets baked for K = 500; force ≈ K′_eff × target depth).
+   - Pose+force label pf (x̂, x̂̇, f̂ predicted; target rebuilt as x̂ + K′⁻¹(D′x̂̇ − f̂)), 3 seeds: mean force 8.0 N at
+     every K′ and success 28 / 31 / 34 % at K′ = 250 / 500 / 1000 — the force level transfers, but success is capped
+     like (c′) because the rebuild contains D·x̂̇ (≈ 670/1800 episodes > 20 N at every K′).
+   - Reference: (b) trained natively at each K′: 99.7 / 99.7 / 99.8 %.
+2. Corrupted force inside label (c) (seed 0, test ID; clean: 6.5 %, 9.1 N, first contact 28.6 s median):
+   - noise σ = 1 N: 12.0 %, 7.9 N; σ = 3 N: 7.2 %, 6.1 N (zero-mean noise lowered the force by 0.3 / 0.7 N on paired
+     scenes, and 9 % / 27 % of episodes never touched).
+   - bias +2 N along n: 16.7 %, 11.3 N (paired shift +2.2 N vs predicted b·K_eff/K = +1.6 N); first contact 6.0 s —
+     the bias acts as a 4 mm free-space lead (b/K), but the extra force gives 201/600 peaks > 20 N.
+   - bias −2 N: 0 %, never touches the table (0/600): the target sits b/K = 4 mm *above* the tool before contact.
+
 ## Figures (script → file)
 
 | figure | script | file |
@@ -145,6 +161,7 @@ Full table with coverage, force and peaks: `results/tables/main_500.md`.
 | Time-limit sensitivity table | `results/table_time_limit.py` | `results/tables/time_limit.md` |
 | Main tables (K_n = 500, 250, 1000) | `results/table_main.py --K {500,250,1000}` | `results/tables/main_{K}.md` |
 | Rollout videos | `results/make_videos.sh` | `results/videos/*.mp4` |
+| Stretch: stiffness transfer, force noise/bias | `results/stretch_analysis.py` | `results/figures/stretch.png` |
 
 ## Limitations to discuss (facts)
 

@@ -19,6 +19,7 @@ import pandas as pd
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+from matplotlib.ticker import NullFormatter
 
 from common import COLORS, k_eff
 from wipe.stats import wilson
@@ -37,7 +38,9 @@ def summarize(d, **meta):
     for dist, s in (("ID", d[~d.ood]), ("OOD", d[d.ood])):
         k, n = int(s.success.sum()), len(s)
         lo, hi = wilson(k, n)
-        out.append(dict(**meta, dist=dist, k=k, n=n, rate=k / n if n else np.nan, lo=lo, hi=hi,
+        rate = k / n if n else np.nan
+        lo, hi = min(lo, rate), max(hi, rate)            # guard float round-off at 0 and 1
+        out.append(dict(**meta, dist=dist, k=k, n=n, rate=rate, lo=lo, hi=hi,
                         fn=s.mean_fn_wipe.mean(), peak_fail=int((s.peak_fn > 20).sum()),
                         uncovered=s.uncovered.mean()))
     return out
@@ -86,7 +89,7 @@ if len(nz):
     print(nz.round(3).to_string(index=False))
 
 if len(pf):
-    fig, ax = plt.subplots(1, 2, figsize=(11, 4))
+    fig, ax = plt.subplots(1, 3, figsize=(16, 4.2), gridspec_kw={"width_ratios": [1, 1, 1.1]})
     for pol, c, ls in (("pf (rebuilt at K')", "#7a4fa3", "-"), ("b trained at 500", COLORS["b"], "--"),
                        ("b trained at K'", COLORS["b"], "-"), ("cp trained at 500", COLORS["cp"], "--"),
                        ("cp trained at K'", COLORS["cp"], "-")):
@@ -94,11 +97,23 @@ if len(pf):
         if len(s):
             ax[0].plot(s.deploy_K, s.rate, "o" + ls, color=c, label=pol)
             ax[1].plot(s.deploy_K, s.fn, "o" + ls, color=c, label=pol)
-    for a in ax:
+    for a in ax[:2]:
         a.set_xscale("log"); a.set_xticks([250, 500, 1000], [250, 500, 1000]); a.set_xlabel("deployment K'_n [N/m]")
+        a.xaxis.set_minor_formatter(NullFormatter())
     ax[0].set_ylabel("ID success"); ax[0].set_ylim(-0.03, 1.03); ax[0].legend(fontsize=7)
     ax[1].set_ylabel("mean f_n while wiping [N]"); ax[1].axhline(10, color="gray", lw=0.6, ls=":")
-    fig.suptitle("Stretch: stiffness transfer (policies trained on K_n = 500 demos unless noted)")
+    if len(nz):
+        idn = nz[nz.dist == "ID"].set_index("variant").reindex(["clean", "fn1", "fn3", "fbp2", "fbm2"])
+        names = ["clean", "noise\nσ=1 N", "noise\nσ=3 N", "bias\n+2 N", "bias\n−2 N"]
+        xx = np.arange(len(idn))
+        ax[2].bar(xx, idn.rate, 0.6, color=COLORS["c"], edgecolor="k", lw=0.5)
+        ax[2].errorbar(xx, idn.rate, yerr=[idn.rate - idn.lo, idn.hi - idn.rate], fmt="none", ecolor="k", capsize=2)
+        for xi, f in zip(xx, idn.fn):
+            ax[2].text(xi, 0.01, f"{f:.1f} N", ha="center", va="bottom", fontsize=7, color="k")
+        ax[2].set_xticks(xx, names, fontsize=8)
+        ax[2].set_ylabel("ID success of label (c), seed 0 (text: mean f_n)")
+        ax[2].set_title("Force noise / bias inside label (c)")
+    fig.suptitle("Stretch goals (policies trained on K_n = 500 demos unless noted)")
     fig.tight_layout()
     fig.savefig("results/figures/stretch.png", dpi=150)
     print("saved results/figures/stretch.png")

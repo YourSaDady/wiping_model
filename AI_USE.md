@@ -43,3 +43,4 @@ final proposal.
   tool; the team is responsible for what they communicate).
 - Text: report and narration must be written by the team (GAI-generated text is not allowed);
   REPORT_NOTES.md and STORYBOARD.md are notes/outlines only.
+| 2026-10-24 | Ran the time-limit sensitivity and stretch evaluations, wrote `results/table_time_limit.py` and `results/stretch_analysis.py`, verified the bias mechanism from the episode data, and updated REPORT_NOTES / TEAM_GUIDE / STATUS. | The team decided not to add the (c″) diagnostic. |
