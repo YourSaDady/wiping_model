@@ -60,8 +60,8 @@ xargs -P 3 -L 1 scripts/run_one.sh < scripts/sweep_list.txt
 # 4-5. final test evaluation: baselines + all 20 policies (~6 h), then secondary analysis
 EVAL_WORKERS=48 scripts/eval_queue.sh
 scripts/extra_queue.sh                                   # T_MAX = 100 s sensitivity
-for r in runs/K*_s[0-9]; do python scripts/action_spread.py --run $r; done
-python results/p2_velocity_gain.py --runs $(ls -d runs/K*_s[0-9] | paste -sd, -)
+for r in runs/K*_{a,b,c,cp}_s[0-9]; do python scripts/action_spread.py --run $r; done
+python results/p2_velocity_gain.py --runs $(ls -d runs/K*_{a,b,c,cp}_s[0-9] | paste -sd, -)
 
 # 6. stretch goals (pose+force label at K'; force noise/bias in label (c)), ~9 h
 scripts/stretch_queue.sh
