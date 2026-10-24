@@ -143,7 +143,8 @@ scripted 100 / 100 %, hybrid 100 / 92 %, DP (a) 0 / 0 %, (b) 99.6 / 52 %, (c) 7 
 
 ## Next
 
-1. Time-limit sensitivity (tmux `extra`) → add to REPORT_NOTES.
+1. Time-limit sensitivity: done 2026-10-24 02:18 — T_MAX 100 s: (a) 0 %, (b) 99.5 %, (c) 82.3 % (from 6.5 %),
+   (c′) 19.5 % (unchanged). (c) is right-force-but-slow; (a) never presses; (c′) fails in contact.
 2. Stretch results (tmux `stretch`): pf label at K′, force noise/bias → analysis script + notes.
 3. Phase 7: storyboard, TEAM_GUIDE Q&A with final numbers, AI_USE, TA check-in notes.
 4. (c″) diagnostic: not added (team decision 2026-10-24); report (c′) with the velocity-gain analysis.

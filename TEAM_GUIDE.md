@@ -248,3 +248,7 @@ OOD: 5 tables × 50 × 3 = 750): scripted 100 / 100 %, hybrid 100 / 92 %, (a) 0 
 - *How many trials, how sure?* 600 ID scenes per policy per seed, Wilson 95 % CIs (e.g. (b)
   [99, 100] %), every label pair different with Holm-corrected Fisher p ≤ 3e-40 and paired McNemar
   p ≤ 1e-11 on ID tables.
+- *Isn't (c)'s failure just your 50 s time limit?* Partly — we checked (pre-registered): with 100 s, (c) goes
+  from 6.5 % to 82 % (seed 0, 600 ID scenes), the rest failing on onset force peaks > 20 N. So (c) has the
+  right contact force but approaches ≈ 10× too slowly. (a) stays at 0 % (never presses), (c′) stays at 20 %
+  (its failures are force chatter and lost lanes), (b) stays at 99.5 %.

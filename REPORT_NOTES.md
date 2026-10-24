@@ -82,6 +82,13 @@ Full table with coverage, force and peaks: `results/tables/main_500.md`.
 
   OOD (seed 0): (b) 96 / 137 / 202 of 250; (c) 0 / 9 / 51; (c′) 43 / 75 / 73.
 
+### Time-limit sensitivity (pre-registered; `results/table_time_limit.py`, `results/tables/time_limit.md`)
+- Seed 0, K_n = 500, 600 ID test scenes, T_MAX 50 s → 100 s: (a) 0 → 0 %; (b) 99.7 → 99.5 %;
+  (c) 6.5 → 82.3 % (McNemar p = 2e-137); (c′) 19.7 → 19.5 %.
+- (c) failures at 50 s are 477 coverage-only (too slow) + 75 both + 9 peak-only; at 100 s: 20 coverage-only,
+  77 peak-only (onset overshoot on stiff tables), 9 both. ⇒ (c) has the right force but is too slow; (a) never
+  presses; (c′)'s failures are unchanged (force chatter / lost lanes), not a time problem.
+
 ### P1 (`results/fig_p1_force_ratio.py`, `results/tables/p1_force_ratio.csv`)
 - Open loop (Phase 1 replay): (a) keeps K/(K+k_e) of the force on soft tables (0.494 vs 0.500; 0.199 vs 0.200; K_n = 1000: 0.662 vs 0.667).
 - Closed loop, K_n = 500, ID: policy/expert force ratio of (a) = 0.078, 0.068, 0.033, 0.031 at k_e = 500, 2e3, 2e4, 1e5 vs predicted 0.50, 0.20, 0.024, 0.005.
@@ -135,6 +142,7 @@ Full table with coverage, force and peaks: `results/tables/main_500.md`.
 | P4 approach trajectories | `results/fig_p4_approach.py` | `results/figures/p4_approach.png` |
 | P4 paths on 28° tables | `results/fig_p4_tilt28_paths.py` | `results/figures/p4_tilt28_paths.png` |
 | P4 contact and OOD | `results/fig_p4_contact_ood.py` | `results/figures/p4_contact_ood.png` |
+| Time-limit sensitivity table | `results/table_time_limit.py` | `results/tables/time_limit.md` |
 | Main tables (K_n = 500, 250, 1000) | `results/table_main.py --K {500,250,1000}` | `results/tables/main_{K}.md` |
 | Rollout videos | `results/make_videos.sh` | `results/videos/*.mp4` |
 
