@@ -41,7 +41,7 @@ contributions, overlap disclosure, AI-use description (see `AI_USE.md`).
 - Evaluation: 50 test scenes × 17 tables per method, T_MAX = 50 s, identical DDIM noise per scene
   across methods (paired trials).
 
-## Numbers so far
+## Early checks (Phases 1–2)
 
 - Phase 1 (`scripts/phase1_checks.py`): expert 50/50 on every table and K; peak ≤ 15.6 N (train), 16.8 N (OOD 3e5).
   Replay: (b) exact; (a) force ratio 0.494 / 0.199 / 0.042 / 0.027 vs K/(K+k_e) = 0.5 / 0.2 / 0.024 / 0.005

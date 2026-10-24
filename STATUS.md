@@ -75,20 +75,14 @@ Command: `python scripts/phase1_checks.py --n 50` (≈ 12 min on 28 workers), th
 
 ## Running jobs
 
-- tmux `sweep`: `xargs -P 3 -L 1 scripts/run_one.sh < scripts/sweep_list.txt` (train 40k steps →
-  select checkpoint on val), logs `logs/sweep.log`, `logs/<run>_{train,select}.log`.
-  Started 2026-10-23 09:52 UTC; expected ≈ 9–10 h. Resumable: rerun the same command.
-- tmux `evalq`: `scripts/eval_queue.sh` — final test evaluation (50 scenes × 17 tables): scripted
-  at K_n = 500/250/1000 and hybrid first, then each sweep run once its `selected.json` exists.
-  Results `results/raw/<method>_test.jsonl` (+ `_traces/` for the first 3 scenes per table, q
-  recorded for scene 0). Started 2026-10-23 09:59 UTC; restarted 11:29 with the pipelined evaluator
-  (`EVAL_WORKERS=48`, ≈ 20 min per policy while training shares the GPU). Resumable.
-- tmux `extra`: `scripts/extra_queue.sh` — time-limit sensitivity (T_MAX = 100 s, seed-0 K_n = 500
-  policies, training-table test scenes); starts after `evalq`.
-- tmux `stretch`: `scripts/stretch_queue.sh` — starts after the main sweep finishes training.
-- Dev worktree `../6.4212-wiping-dev` (branch `dev`): stretch-goal code (pose+force label `pf`,
-  `--deploy-K`, label force noise/bias), P2 inertia diagnostic, P1/P3/P4 figure scripts. Merge
-  into master after the sweep (kept separate so running jobs never load half-edited code).
+None (all queues finished 2026-10-24 06:52 UTC). How the jobs were run (all resumable; rerun the same
+command to resume):
+- `xargs -P 3 -L 1 scripts/run_one.sh < scripts/sweep_list.txt` — train 40k steps → select checkpoint on val
+  (logs `logs/<run>_{train,select}.log`); ≈ 12 h for 20 runs on the shared A6000.
+- `EVAL_WORKERS=48 scripts/eval_queue.sh` — final test evaluation of baselines and all 20 runs (≈ 17 min per policy).
+- `scripts/extra_queue.sh` — time-limit sensitivity (T_MAX = 100 s).
+- `scripts/stretch_queue.sh` — stretch training + evaluation (≈ 9 h).
+- The dev worktree used during the sweep was merged into master and removed.
 
 ## First results (validation, 2026-10-23 11:25)
 
