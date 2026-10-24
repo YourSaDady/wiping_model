@@ -146,7 +146,7 @@ scripted 100 / 100 %, hybrid 100 / 92 %, DP (a) 0 / 0 %, (b) 99.6 / 52 %, (c) 7 
 1. Time-limit sensitivity (tmux `extra`) → add to REPORT_NOTES.
 2. Stretch results (tmux `stretch`): pf label at K′, force noise/bias → analysis script + notes.
 3. Phase 7: storyboard, TEAM_GUIDE Q&A with final numbers, AI_USE, TA check-in notes.
-4. Pending team decision: optional inertia-corrected (c″) diagnostic.
+4. (c″) diagnostic: not added (team decision 2026-10-24); report (c′) with the velocity-gain analysis.
 
 ## TA check-in notes (bullet facts — rewrite in your own words before submitting)
 
