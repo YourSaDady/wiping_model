@@ -1,4 +1,4 @@
-import sys, time
+import os, sys, time
 import numpy as np
 from wipe.scene import make_scene
 from wipe.sim import WipeEnv
@@ -26,4 +26,5 @@ log = np.array(log)
 for ph in range(5):
     s = log[log[:, 1] == ph]
     if len(s): print(ph, len(s), "fn mean %.2f min %.2f max %.2f" % (s[:, 2].mean(), s[:, 2].min(), s[:, 2].max()), "gap min %.4f" % s[:, 3].min())
-np.save("/tmp/claude-1000/-data-bobby/ac9f6883-d817-4de0-9c7c-102fd2438dcc/scratchpad/explog.npy", log)
+os.makedirs("results/milestone", exist_ok=True)
+np.save("results/milestone/try_expert_log.npy", log)   # (t, phase, f_n, gap, x_d in region frame)

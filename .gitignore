@@ -5,6 +5,5 @@ data/
 runs/
 logs/
 results/raw/
-results/videos/*.mp4
 .cache/
 *.egg-info/
