@@ -1,0 +1,4 @@
+drake>=1.57.0
+numpy
+matplotlib
+jupyterlab   # only for the notebook
