@@ -2,7 +2,8 @@
 
 WipeEnv runs at the 20 Hz policy rate with zero-order hold on the commanded
 target x_d. Each policy step advances the 1 kHz plant in SUBSTEPS chunks and
-samples the tool for the coverage metric at 100 Hz; the peak normal force is
+samples the tool (contact point, normal force, friction power) for the coverage
+metric at 100 Hz; the peak normal force is
 tracked at 1 kHz by PeakForceMonitor.
 
 Contact: point contact with the lagged discrete approximation. Drake combines
@@ -15,7 +16,8 @@ import numpy as np
 from pydrake.all import (AddMultibodyPlant, Box, CoulombFriction, Cylinder, DiagramBuilder,
                          InverseKinematics, MultibodyPlantConfig, Parser, ProximityProperties,
                          RigidTransform, RollPitchYaw, RotationMatrix, Simulator, Solve, SpatialInertia,
-                         Sphere, UnitInertia, AddContactMaterial, IllustrationProperties)
+                         Sphere, UnitInertia, AddContactMaterial, IllustrationProperties,
+                         MeshcatVisualizer)
 
 from .config import (BALL_RADIUS, DT_POLICY, DT_SIM, FRICTION, HC_DISSIPATION, SUBSTEPS, TASK, TOOL_MASS,
                      TOOL_OFFSET, Gains, MAIN_GAINS, TaskParams)
@@ -29,7 +31,7 @@ Q_NOMINAL = np.array([0.0, 0.6, 0.0, -1.6, 0.0, 0.95, 0.0])
 TABLE_SIZE = (0.5, 0.5, 0.10)
 
 
-def add_robot_and_tool(plant, k_e: float | None):
+def add_robot_and_tool(plant, k_e: float | None, mu: float = FRICTION):
     model = Parser(plant).AddModelsFromUrl(IIWA_URL)[0]
     plant.WeldFrames(plant.world_frame(), plant.GetFrameByName("iiwa_link_0", model))
     # Tool body frame origin = ball centre (the controlled point). The rod's COM
@@ -48,7 +50,7 @@ def add_robot_and_tool(plant, k_e: float | None):
         if k_e is not None:
             props = ProximityProperties()
             AddContactMaterial(dissipation=HC_DISSIPATION, point_stiffness=2.0 * k_e,
-                               friction=CoulombFriction(FRICTION, FRICTION), properties=props)
+                               friction=CoulombFriction(mu, mu), properties=props)
             plant.RegisterCollisionGeometry(tool, RigidTransform(), Sphere(BALL_RADIUS), "ball", props)
     return model, tool
 
@@ -59,10 +61,10 @@ def table_pose(scene: Scene) -> RigidTransform:
     return RigidTransform(R, c - 0.5 * TABLE_SIZE[2] * scene.arr("n"))
 
 
-def add_table(plant, scene: Scene):
+def add_table(plant, scene: Scene, mu: float = FRICTION):
     props = ProximityProperties()
     AddContactMaterial(dissipation=HC_DISSIPATION, point_stiffness=2.0 * scene.k_e,
-                       friction=CoulombFriction(FRICTION, FRICTION), properties=props)
+                       friction=CoulombFriction(mu, mu), properties=props)
     X = table_pose(scene)
     plant.RegisterCollisionGeometry(plant.world_body(), X, Box(*TABLE_SIZE), "table", props)
     # colour encodes stiffness: soft = light green, hard = dark grey
@@ -105,15 +107,17 @@ class WipeEnv:
     """
 
     def __init__(self, scene: Scene, gains: Gains = MAIN_GAINS, controller: str = "impedance",
-                 task: TaskParams = TASK, record_q: bool = False, hybrid_kwargs=None):
+                 task: TaskParams = TASK, record_q: bool = False, hybrid_kwargs=None, meshcat=None,
+                 mu: float = FRICTION):
         self.scene, self.gains, self.task, self.kind = scene, gains, task, controller
         self.n = scene.arr("n")
         builder = DiagramBuilder()
         cfg = MultibodyPlantConfig(time_step=DT_SIM, contact_model="point",
                                    discrete_contact_approximation="lagged")
         plant, sg = AddMultibodyPlant(cfg, builder)
-        self.model, self.tool = add_robot_and_tool(plant, scene.k_e)
-        add_table(plant, scene)
+        self.mu = mu          # Coulomb friction of the ball and the table (default FRICTION; watch_expert --mu)
+        self.model, self.tool = add_robot_and_tool(plant, scene.k_e, mu)
+        add_table(plant, scene, mu)
         plant.Finalize()
         self.plant, self.scene_graph = plant, sg
 
@@ -139,6 +143,8 @@ class WipeEnv:
         peak = builder.AddSystem(PeakForceMonitor(self.n))
         builder.Connect(sensor.get_output_port(), peak.f_in)
         self.ctrl, self.sensor, self.peak = ctrl, sensor, peak
+        # optional live 3D view (scripts/watch_expert.py); None leaves the diagram unchanged
+        self.visualizer = MeshcatVisualizer.AddToBuilder(builder, sg, meshcat) if meshcat is not None else None
         self.diagram = builder.Build()
 
         self.simulator = Simulator(self.diagram)
@@ -157,7 +163,7 @@ class WipeEnv:
         self.coverage = Coverage(scene.L, task)
         self.record_q = record_q
         self.q_log = [self.q0.copy()] if record_q else None
-        self.samples = []     # 100 Hz: (t, u1, u2, h, fn)
+        self.samples = []     # 100 Hz: (t, u1, u2, h, fn, p_fric)
         self._sample()
 
     # ------------------------------------------------------------------ state
@@ -176,11 +182,21 @@ class WipeEnv:
                     u=self.coverage.uncovered)
 
     def _sample(self):
-        x, _ = self.tool_state()
+        X = self.plant.EvalBodyPoseInWorld(self.pctx, self.tool)
+        V = self.plant.EvalBodySpatialVelocityInWorld(self.pctx, self.tool)
+        x = X.translation()
         u = self.scene.to_plane(x)
-        fn = float(self.n @ self.force())
-        self.coverage.add(u[0], u[1], fn)
-        self.samples.append((self.root.get_time(), u[0], u[1], u[2] - BALL_RADIUS, fn))
+        f = self.force()
+        fn = float(self.n @ f)
+        # friction power at the contact point (ball bottom along -n): P = -f_t . v_t >= 0 while sliding
+        v_c = V.translational() + np.cross(V.rotational(), -BALL_RADIUS * self.n)
+        f_t = f - fn * self.n
+        v_t = v_c - float(self.n @ v_c) * self.n
+        p_fric = max(0.0, -float(f_t @ v_t))
+        t = self.root.get_time()
+        dt = t - self.samples[-1][0] if self.samples else 0.0
+        self.coverage.add(u[0], u[1], fn, power=p_fric, dt=dt)
+        self.samples.append((t, u[0], u[1], u[2] - BALL_RADIUS, fn, p_fric))
 
     # ------------------------------------------------------------------ stepping
     def step(self, x_d=None) -> dict:

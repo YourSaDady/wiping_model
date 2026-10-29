@@ -69,8 +69,15 @@ def scene_seed(table: str, split: str, index: int) -> int:
     return int(ss.generate_state(1)[0])
 
 
-def make_scene(table: str, split: str, index: int) -> Scene:
+def make_scene(table: str, split: str, index: int, tilt_deg: float | None = None, k_e: float | None = None,
+               v: float | None = None, L: float | None = None) -> Scene:
+    """Scene `index` of `split` on `table`. The optional overrides replace the table's tilt / k_e or
+    the sampled speed / region side after sampling, so the rest of the scene (position, height,
+    start pose) stays the one drawn from the same seed (used by scripts/watch_expert.py)."""
     spec = TABLES[table]
+    if tilt_deg is not None or k_e is not None:
+        spec = TableSpec(spec.name, spec.tilt_deg if tilt_deg is None else float(tilt_deg),
+                         spec.k_e if k_e is None else float(k_e), spec.split)
     rng = np.random.default_rng(scene_seed(table, split, index))
     n = spec.normal
     t1 = np.array([1.0, 0.0, 0.0])            # lanes run along world x (fixed in the table frame)
@@ -78,9 +85,11 @@ def make_scene(table: str, split: str, index: int) -> Scene:
     # Surface point at the region centre. Height is randomized; for a tilted table
     # this is the height of the region centre.
     c = np.array([rng.uniform(0.52, 0.60), rng.uniform(-0.04, 0.04), rng.uniform(0.06, 0.16)])
-    L = rng.uniform(0.13, 0.17)
+    L_s = rng.uniform(0.13, 0.17)
+    L = L_s if L is None else float(L)
     p0 = c - 0.5 * L * t1 - 0.5 * L * t2
-    v = rng.uniform(0.05, 0.12)
+    v_s = rng.uniform(0.05, 0.12)
+    v = v_s if v is None else float(v)
     h0 = rng.uniform(0.04, 0.07)                # start height of the ball bottom above the surface
     j1, j2 = rng.uniform(-0.01, 0.01, size=2)
     from .config import BALL_RADIUS

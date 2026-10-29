@@ -19,12 +19,20 @@ T_MAX = 50.0           # time limit for learned policies and baselines [s]
 @dataclass(frozen=True)
 class TaskParams:
     f_des: float = 10.0        # desired normal force [N]
-    f_min: float = 5.0         # a sample counts as wiping only if f_n >= f_min
+    f_min: float = 5.0         # "force" coverage: a sample wipes only if f_n >= f_min
     f_max: float = 20.0        # trial fails if the 1 kHz normal force ever exceeds this
     eps_u: float = 0.10        # trial fails if the uncovered fraction exceeds this
     r_wipe: float = 0.02       # virtual wiping-patch radius [m] (task parameter)
     n_lanes: int = 6           # lanes per region; lane spacing s = L / (n_lanes - 1)
     grid_res: float = 0.002    # coverage grid cell size [m]
+    # Coverage criterion (README "Success criterion"):
+    #   "work"  - a cell is wiped once the friction work done while it was under the patch,
+    #             sum over samples of |f_t . v_t| dt, reaches w_min (Archard-style wear dose);
+    #   "force" - the proposal's original rule: wiped once under the patch at a sample with f_n >= f_min.
+    coverage_mode: str = "work"
+    w_min: float = 0.06        # [J] = mu * f_min * 2 r_wipe = 0.3 * 5 N * 4 cm: one full patch-diameter
+                               # pass at the minimum force. Calibrated so that the expert path wipes the
+                               # region at f_des = 10 N but not at f_n <= f_min (README "Success criterion")
 
 
 TASK = TaskParams()

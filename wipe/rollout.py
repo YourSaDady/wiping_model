@@ -23,7 +23,7 @@ def _pack(env: WipeEnv, obs_list, x_d=None, phase=None, extra=None):
         ep["phase"] = np.array(phase, dtype=np.int8)
     ep["metrics"] = env.metrics()
     ep["scene"] = env.scene.to_dict()
-    ep["samples"] = np.array(env.samples, dtype=np.float32)   # 100 Hz (t, u1, u2, gap, fn)
+    ep["samples"] = np.array(env.samples, dtype=np.float32)   # 100 Hz (t, u1, u2, gap, fn, p_fric)
     if env.record_q:
         ep["q_hi"] = np.array(env.q_log, dtype=np.float32)
     if extra:

@@ -43,19 +43,42 @@ def test_gain_matrices_table_frame():
 def test_lane_path_covers_region():
     sc = make_scene("tilt00_ke2e4", "dev", 0)
     path = LanePath(sc, (0.0, 0.0))
-    cov = Coverage(sc.L)
-    for s in np.linspace(0, path.length, 4000):
-        cov.add(*path.at(s), fn=TASK.f_des)
-    assert cov.uncovered == 0.0
+    from dataclasses import replace
+    geo = Coverage(sc.L, replace(TASK, coverage_mode="force"))     # geometry: every cell under the patch once
+    cov = Coverage(sc.L)                                            # friction work at f_des
+    ss = np.linspace(0, path.length, 4000)
+    for s in ss:     # sliding at f_des: friction power mu f_des v over dt = ds / v
+        geo.add(*path.at(s), fn=TASK.f_des)
+        cov.add(*path.at(s), fn=TASK.f_des, power=FRICTION * TASK.f_des, dt=ss[1] - ss[0])
+    assert geo.uncovered == 0.0
+    assert cov.uncovered <= 0.01      # only the far corner of the last lane gets a short pass
     assert np.allclose(path.at(path.length), (0.0, sc.L))      # ends at the far corner of the last lane
     assert path.length == pytest.approx(TASK.n_lanes * sc.L + sc.L, rel=1e-9)
 
 
-def test_coverage_requires_force():
-    cov = Coverage(0.15)
+def test_coverage_force_mode_requires_force():
+    from dataclasses import replace
+    cov = Coverage(0.15, replace(TASK, coverage_mode="force"))
     cov.add(0.07, 0.07, fn=TASK.f_min - 0.01)
     assert cov.uncovered == 1.0
     cov.add(0.07, 0.07, fn=TASK.f_min)
+    frac = np.pi * TASK.r_wipe ** 2 / 0.15 ** 2
+    assert 1.0 - cov.uncovered == pytest.approx(frac, rel=0.05)
+
+
+def test_coverage_work_mode_needs_sliding_work():
+    cov = Coverage(0.15)
+    assert TASK.coverage_mode == "work"
+    for _ in range(100):          # pressing hard without sliding: no friction work, nothing wiped
+        cov.add(0.07, 0.07, fn=2 * TASK.f_des, power=0.0, dt=0.01)
+    assert cov.uncovered == 1.0
+    p = FRICTION * TASK.f_des * 0.05          # sliding at f_des, 5 cm/s
+    n_req = TASK.w_min / (p * 0.01)            # samples needed under the patch
+    for _ in range(int(np.floor(n_req)) - 1):
+        cov.add(0.07, 0.07, fn=TASK.f_des, power=p, dt=0.01)
+    assert cov.uncovered == 1.0 and 0.9 < cov.progress.max() < 1.0
+    cov.add(0.07, 0.07, fn=TASK.f_des, power=p, dt=0.01)
+    cov.add(0.07, 0.07, fn=TASK.f_des, power=p, dt=0.01)
     frac = np.pi * TASK.r_wipe ** 2 / 0.15 ** 2
     assert 1.0 - cov.uncovered == pytest.approx(frac, rel=0.05)
 
