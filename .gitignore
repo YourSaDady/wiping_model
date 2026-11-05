@@ -7,3 +7,6 @@ logs/
 results/raw/
 .cache/
 *.egg-info/
+.DS_Store
+*.pt
+*.ckpt

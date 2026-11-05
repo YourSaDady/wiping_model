@@ -1,6 +1,8 @@
 """Demo storage and the observation vector shared by every policy.
 
-Episodes are stored one per file: data/demos/K{K_n}/{table}/{index:03d}.npz.
+Episodes are stored one per file: data/demos/K{K_n}/{table}/{index:03d}.npz for
+the demo split, data/expert_{split}/K{K_n}/{table}/{index:03d}.npz for expert runs
+on val/test/dev scenes (offline test set and expert reference).
 The observation is identical for every label:
   o_t = (x_t, xdot_t, f_t, p0, L, n)  -> 16 numbers
 x is the ball-centre position, xdot its velocity, f the contact force on the
@@ -29,8 +31,12 @@ def obs_vector(x, xdot, f, scene: Scene) -> np.ndarray:
                            np.broadcast_to(const, lead + (7,))], axis=-1)
 
 
-def demo_path(K_n: int, table: str, index: int, root: str = DATA_ROOT) -> str:
-    return os.path.join(root, "demos", f"K{K_n}", table, f"{index:03d}.npz")
+def split_dir(K_n: int, split: str = "demo", root: str = DATA_ROOT) -> str:
+    return os.path.join(root, "demos" if split == "demo" else f"expert_{split}", f"K{K_n}")
+
+
+def demo_path(K_n: int, table: str, index: int, root: str = DATA_ROOT, split: str = "demo") -> str:
+    return os.path.join(split_dir(K_n, split, root), table, f"{index:03d}.npz")
 
 
 def save_episode(path: str, ep: dict) -> None:
@@ -54,8 +60,8 @@ def load_episode(path: str) -> dict:
     return ep
 
 
-def list_demos(K_n: int, table: str, root: str = DATA_ROOT):
-    return sorted(glob.glob(os.path.join(root, "demos", f"K{K_n}", table, "[0-9][0-9][0-9].npz")))
+def list_demos(K_n: int, table: str, root: str = DATA_ROOT, split: str = "demo"):
+    return sorted(glob.glob(os.path.join(split_dir(K_n, split, root), table, "[0-9][0-9][0-9].npz")))
 
 
 def split_paths(K_n: int, tables, n_train: int = 32, n_val: int = 4, root: str = DATA_ROOT):
