@@ -11,7 +11,7 @@ target, (c′) force + damping compensated.
 Every section below folds: click a ▸ heading to open or close it.
 
 - Dataset (Hugging Face): [`Lo-Fi-gahara/wipe-labels`](https://huggingface.co/datasets/Lo-Fi-gahara/wipe-labels)
-- Model weights (Hugging Face, after training): `Lo-Fi-gahara/wipe-dp`
+- Model weights (Hugging Face): [`Lo-Fi-gahara/wipe-dp`](https://huggingface.co/Lo-Fi-gahara/wipe-dp) (so far `K500_c_s0` and `K500_cp_s0`: labels (c) and (c′), K_n = 500)
 
 <details open>
 <summary><h2>Nov 6 milestone checklist</h2></summary>
@@ -21,7 +21,7 @@ Every section below folds: click a ▸ heading to open or close it.
 | Scripted program wipes reliably on all training tables | `scripts/gen_demos.py`; [Dataset statistics](#dataset-statistics) | done: 1296/1296 demos at K_n = 250 / 500 / 1000, no expert failure |
 | Demonstrations collected and all labels built | `scripts/export_dataset.py` → CSV with a / b / c / c′ in every row; on Hugging Face | done: [`Lo-Fi-gahara/wipe-labels`](https://huggingface.co/datasets/Lo-Fi-gahara/wipe-labels) |
 | Offline P2 check | `scripts/p2_offline_check.py`, `results/p2/`, `results/figures/p2_offline_gap.png` | done, see "P2 offline check" |
-| First policy trained and evaluated in closed loop | `diffusion_policy/` (training, inference, Drake evaluation), `diffusion_policy/colab_train.ipynb` | code done and smoke-tested locally; full training of label (c) on Colab next |
+| First policy trained and evaluated in closed loop | `diffusion_policy/` (training, inference, Drake evaluation), `diffusion_policy/colab_train.ipynb` | done: labels (c) and (c′) trained on Colab (40k steps each, T4), weights on [`Lo-Fi-gahara/wipe-dp`](https://huggingface.co/Lo-Fi-gahara/wipe-dp). Closed loop on test: (c) 3/170, (c′) 44/170, see [Results](#dp-results) |
 
 <details>
 <summary><b>Oct 30 milestone checklist (done)</b></summary>
@@ -53,10 +53,22 @@ pytest tests/                                     # 13 tests
 # dataset -> data/hf/wipe-labels/  (all three K_n folders; add --include "K500/*" --include "scenes/*" for the main one only)
 hf download Lo-Fi-gahara/wipe-labels --repo-type dataset --local-dir data/hf/wipe-labels
 
-# trained policies -> runs/<run name>/  (config.json, log.csv, ema_best.pt, ...)
+# trained policies -> runs/<run name>/  (config.json, log.csv, best.json, ema_best.pt; 263 MB per run)
 hf download Lo-Fi-gahara/wipe-dp --local-dir runs                          # all runs
-hf download Lo-Fi-gahara/wipe-dp --include "K500_c_s0/*" --local-dir runs  # one run
+hf download Lo-Fi-gahara/wipe-dp --include "K500_c_s0/*" --local-dir runs   # one run: label (c), K_n = 500
+hf download Lo-Fi-gahara/wipe-dp --include "K500_cp_s0/*" --local-dir runs  # one run: label (c′), K_n = 500
+
+# closed-loop evaluation of a downloaded run in Drake (writes results/raw/<run>_<split>.jsonl)
+python -m diffusion_policy.eval --run runs/K500_c_s0 --split val --tables train --n 10
+python -m diffusion_policy.eval --run runs/K500_c_s0 --watch tilt00_ke2e4 0 --split val   # one episode, Meshcat
 ```
+
+Available runs:
+
+| run | label | K_n | steps | best val exec error | trained on |
+|---|---|---|---|---|---|
+| `K500_c_s0` | (c) | 500 | 40k (best = last) | 0.39 mm | Colab T4, `--amp`, 84 min |
+| `K500_cp_s0` | (c′) | 500 | 40k (best = last) | 0.51 mm | Colab T4, `--amp`, 80 min |
 
 Training code also takes the dataset repo id directly (`--data Lo-Fi-gahara/wipe-labels`), and
 downloads it into the Hugging Face cache. Training needs only `torch numpy pandas huggingface_hub`
@@ -725,6 +737,25 @@ on them by default (`--patience 0`).
 - Train the fixed budget and pick the checkpoint by closed-loop success on the 120 `val` scenes.
 - Test scenes are used only for the final numbers.
 
+**Full training runs, labels (c) and (c′) (Nov 5, Colab T4, `--amp`).** `runs/K500_c_s0` and
+`runs/K500_cp_s0`: same data and settings. Each uses 384 train episodes (228,531 windows),
+batch 256 and 40k steps (44.8 epochs), and took 84 and 80 min. The validation errors (EMA model,
+DDIM 16 steps, against the label chunk) still decrease at the end, so for both runs the best
+snapshot is the last one.
+
+| step | train loss (c / c′) | val loss | first action err [mm] | executed chunk err [mm] | normal component [mm] |
+|---|---|---|---|---|---|
+| 2k | 0.0890 / 0.0894 | 0.0081 / 0.0082 | 0.89 / 1.35 | 1.91 / 2.76 | 0.68 / 1.02 |
+| 10k | 0.0058 / 0.0059 | 0.0034 / 0.0034 | 0.43 / 0.63 | 0.98 / 1.37 | 0.36 / 0.49 |
+| 20k | 0.0032 / 0.0032 | 0.0022 / 0.0021 | 0.28 / 0.38 | 0.65 / 0.90 | 0.25 / 0.33 |
+| 40k | 0.0014 / 0.0013 | 0.0013 / 0.0013 | 0.18 / 0.23 | 0.39 / 0.51 | 0.16 / 0.19 |
+
+Label (c′) has a slightly larger offline error: it contains ẋ, which is noisier than x. In closed
+loop it is far better (below), which again shows that offline error does not rank labels.
+
+Sub-millimetre offline error does not mean closed-loop success: see the closed-loop results under
+"Results".
+
 **Local smoke test (Nov 5, M5 Max, MPS).**
 
 - **Training.** 800 steps of a 5.4M-parameter U-Net on 48 episodes: the validation chunk error
@@ -764,6 +795,98 @@ on them by default (`--patience 0`).
   | tilt00_ke250 (held out) | 50/50 | 11.20 | 8.35 |
 
 - **Demonstrations and P2:** see "Data" and "P2 offline check" above.
+
+<a id="dp-results"></a>
+
+- **Diffusion Policy, labels (c) and (c′), K_n = 500, closed loop in Drake.**
+  - Runs: `runs/K500_{c,cp}_s0`, using `ema_best.pt` (step 40k).
+  - Inference: DDIM 16 steps, execute 8 of 16, 50 s per episode, 10 scenes per table.
+  - Commands: `python -m diffusion_policy.eval --run runs/K500_cp_s0 --split val --tables train --n 10`
+    and `... --split test --tables all --n 10`.
+  - Data: per-table numbers in `results/dp/by_table.csv`, per-episode numbers in
+    `results/dp/K500_{c,cp}_s0_{val,test}_episodes.csv`.
+
+  | scenes | label | success | mean uncovered | mean f_n while wiping [N] | f_n in band [%] | first contact, median [s] | peak > 20 N |
+  |---|---|---|---|---|---|---|---|
+  | val, 12 training tables (120) | (c) | 1/120 | 0.49 | 8.87 | 89 | 35.2 | 23 |
+  | | (c′) | **28/120** | **0.16** | 7.86 | 79 | **4.0** | 51 |
+  | test, 12 training tables (120) | (c) | 3/120 | 0.44 | 9.04 | 91 | 32.5 | 24 |
+  | | (c′) | **34/120** | **0.15** | 7.86 | 79 | **4.0** | 51 |
+  | test, 5 OOD tables (50) | (c) | 0/50 | 0.72 | 6.93 | 70 | 35.1 | 11 |
+  | | (c′) | **10/50** | **0.18** | 8.36 | 85 | **4.4** | 27 |
+  | scripted expert, same 170 test scenes | (b) | 170/170 | 0.001 | 9.98 (sweep) | – | 4.4 | 0 (max 16.2 N) |
+
+  Success needs uncovered ≤ 0.1 **and** a 1 kHz peak f_n ≤ 20 N. By table stiffness (val + test,
+  both splits):
+
+  | k_e [N/m] | episodes | (c) success | (c′) success | (c′) peak > 20 N | (c′) uncovered > 0.1 | (c′) median peak [N] |
+  |---|---|---|---|---|---|---|
+  | 250 (OOD) | 10 | 0 | 8 | 0 | 2 | 13.4 |
+  | 500 | 70 | 2 | 48 | 0 | 22 | 12.7 |
+  | 2e3 | 60 | 1 | 14 | 0 | 46 | 12.9 |
+  | 2e4 | 70 | 1 | 2 | 49 | 48 | 21.2 |
+  | 5e4 (OOD) | 10 | 0 | 0 | 10 | 9 | 27.5 |
+  | 1e5 | 60 | 0 | 0 | 60 | 52 | 29.9 |
+  | 3e5 (OOD) | 10 | 0 | 0 | 10 | 8 | 30.7 |
+
+  **Label (c): too slow, not too weak.**
+
+  - **Force is right.** Once in contact it holds f_n ≈ 9 N, with 89–91 % of the samples in the
+    force band on the training tables. Label (c) fixes the P1 force deficit; label (a) gave
+    f_n ≈ 0.6 N in the NN check.
+  - **Speed is wrong.** It reaches the table only after a median 33–35 s (expert: 4.4 s) and sweeps
+    at about half the expert's speed, so most episodes time out with 40–50 % of the region left.
+  - **Why.** Label (c) lacks the damping lead K⁻¹Dẋ.
+    - In free space f = 0, so c = x_{t+1}, the next *measured* pose. To keep moving at ẋ, an
+      impedance controller needs its target ahead of the pose by ≈ K⁻¹Dẋ. Offline, P2 measured
+      this gap in the approach as 5.9 mm for (c) vs 0.5 mm for (c′).
+    - Commanding x_{t+1} therefore produces less motion than in the demo. The next observation
+      has a lower ẋ, the policy (conditioned on ẋ) imitates a slower expert state, and the
+      slowdown compounds.
+
+  **Label (c′) = c + K⁻¹Dẋ: speed fixed, as P2 predicted.** `scripts/dp_speed_check.py`, val
+  scene 0:
+
+  | table | label | speed before contact | in-plane speed in contact | uncovered at 50 s |
+  |---|---|---|---|---|
+  | tilt00_ke2e4 | (c) | 0.0018 m/s | 0.028 m/s | 0.28 |
+  | | (c′) | 0.0116 m/s | 0.067 m/s | 0.06 |
+  | | expert | 0.0137 m/s (approach) | 0.056 m/s (sweep) | 0 |
+  | tilt20_ke500 | (c) | 0.0018 m/s | 0.036 m/s | 0.61 |
+  | | (c′) | 0.0162 m/s | 0.080 m/s | 0.00 |
+  | | expert | 0.0086 m/s (approach) | 0.070 m/s (sweep) | 0 |
+
+  - **Faster, and the force stays in band.** (c′) touches down at 4.0 s, like the expert. It
+    cuts the uncovered fraction from 0.44–0.49 to 0.15–0.16, and raises success from 1 to 28 of
+    120 on val, and from 3 to 44 of 170 on test (including 10/50 on OOD tables, among them 2/10
+    on tilt28_ke2e4). The mean force while wiping drops to 7.9 N, still inside the force band.
+  - **Failure 1: impacts on stiff tables (k_e ≥ 2e4).** Most (c′) episodes on these tables
+    exceed 20 N: 49/70 at 2e4, and all at k_e ≥ 5e4 (median peak 21–31 N). No episode on a softer
+    table does.
+    - `scripts/dp_contact_segments.py` (tilt00_ke1e5, val 0) shows the cause: at lane turns the
+      tool briefly leaves the table, by 2–3 mm for 0.05–0.4 s, and lands again.
+    - Each landing on a stiff table gives a 1 kHz spike (25 N at 10.9 s, 31 N at 40.1 s).
+    - The expert never leaves the table mid-sweep (max 16.2 N).
+    - The landing speed is set by the extra K⁻¹Dẋ_n term in the normal direction. (c′) is also the
+      label with the largest offline gap at lift-off (9.8 mm vs 7.6 mm for (c)), i.e. it reacts
+      most strongly to normal motion.
+  - **Failure 2: the region is left early (all tables).** 187/290 episodes end with uncovered
+    > 0.1, typically 0.1–0.3, with the gaps along the far edge.
+    - In the two traced episodes the policy wipes 5 of the 6 lanes, lifts off, returns home and
+      starts again. The second pass also stops before the last lane, and the far-edge strip
+      stays unwiped:
+
+      ![(c′), tilt00_ke2e3 val 0](results/figures/dp_cp_topview_tilt00_ke2e3_val0.png)
+      ![(c′), tilt00_ke1e5 val 0](results/figures/dp_cp_topview_tilt00_ke1e5_val0.png)
+
+    - The observation (x, ẋ, f, region) holds no explicit progress. With To = 2 steps of history,
+      "lane 5 done" and "region done" look alike near the far edge.
+    - Candidate fixes: a lane index or coverage feature, longer history, or ending the demos at
+      lift-off.
+  - **Without the 20 N limit**, (c′) would succeed in 103/290 episodes (uncovered ≤ 0.1), against
+    6/290 for (c).
+  - **Offline vs closed loop.** (c′) has the larger offline chunk error (0.51 vs 0.39 mm) but is
+    the far better closed-loop policy. Checkpoints and labels must be compared in closed loop.
 - **One logged flat-table episode** (tilt00_ke2e4, dev scene 0):
   `results/figures/milestone_flat_log.png`.
 - **Videos of the scripted program on flat tables:** `results/videos/tilt00_ke500_000_scripted.mp4`
