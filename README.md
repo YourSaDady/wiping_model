@@ -581,38 +581,29 @@ Everything is in `diffusion_policy/`:
 <details open>
 <summary><h3>Inference: how a wiping motion is generated and executed</h3></summary>
 
-```
- time ──────────────────────────────────────────────────────────────────────────────────────────►
- policy steps (20 Hz, Δt = 50 ms)
-        t−1          t          t+1        t+2     · · ·     t+7         t+8
-         │           │           │          │                 │           │
- ①  observe  o_{t−1}, o_t        o = (x, ẋ, f, p0, L, n̂)  16 numbers, from the simulated sensors
-         └─────┬─────┘
-               ▼
- ②  policy  ┌──────────────────────────────────────────────────────────────┐
-    (one    │ c = normalize([o_{t−1}, o_t])                    32 numbers  │
-     call   │ A ~ N(0, I)                     16 × 3, seeded (scene, call) │
-     per    │ 16 DDIM steps, k = 90, 84, …, 6, 0:                          │
-     0.4 s) │     ε̂ = ε_θ(A, k, c)         1D U-Net, FiLM on [emb(k), c]   │
-            │     â₀ = (A − √(1−ᾱ_k) ε̂) / √ᾱ_k,  clip to [−1, 1]           │
-            │     A  = √ᾱ_{k'} â₀ + √(1−ᾱ_{k'}) ε̂            (k' = k − 6)  │
-            │ Δ_0 … Δ_15 = unnormalize(A)       offsets from x_t [m]       │
-            │ x_{d,t+j} = x_t + Δ_j             world-frame targets        │
-            └──────────────────────────────┬───────────────────────────────┘
-                                           ▼
- ③  execute  │ x_{d,t} │ x_{d,t+1} │ x_{d,t+2} │ · · · │ x_{d,t+7} │   x_{d,t+8 … t+15} discarded
-    (each target held 50 ms, zero-order hold)               │
-                                                            └──► ① again at t+8 with (o_{t+7}, o_{t+8})
- ④  impedance controller, 1 kHz (50 updates per target):
-        τ = Jᵀ [ K_rot e_R − D_rot ω ;  K (x_d − x) − D ẋ ] − τ_g + N τ_null
- ⑤  Drake MultibodyPlant, 1 ms: iiwa + ball tool + table (contact k_e, μ)
-        → x, ẋ, f at every 50 ms step (the next observations) and coverage samples at 100 Hz
-```
+![Diffusion Policy inference: one policy call, then the execution timeline](results/figures/dp_inference.png)
+
+How to read the figure:
+
+- **① One call.** The last two observations are normalized into the condition vector s_t (32
+  numbers).
+  - Starting from Gaussian noise, the U-Net ε_θ is applied 16 times (DDIM, k = 90, 84, …, 0).
+    Each pass predicts the noise ε̂ and moves the chunk one step closer to a clean sample.
+  - Every residual block is conditioned by FiLM: a linear layer maps [step embedding emb(k), s_t]
+    (256 + 32 = 288 numbers) to a per-channel scale γ and bias β of the feature map.
+  - The clean chunk is unnormalized into 16 offsets from the current pose, giving 16 world-frame
+    targets.
+- **② Execution.**
+  - Only the first 8 targets are used: each is held for 50 ms (zero-order hold) while the 1 kHz
+    Cartesian impedance controller tracks it.
+  - At t+8 the policy is called again with the latest observations (o_{t+7}, o_{t+8}). The
+    remaining 8 predicted targets are discarded (receding horizon).
+  - Drawn by `scripts/plot_dp_inference.py`.
 
 **The four policies differ only in what x_d means.**
 
-- (b), (c) and (c′) learn targets that lie f/K below the surface, so the spring in ④ presses.
-- (a) learns targets on the surface, so the spring in ④ barely presses.
+- (b), (c) and (c′) learn targets that lie f/K below the surface, so the impedance spring presses.
+- (a) learns targets on the surface, so the spring barely presses.
 
 The orientation and the null-space posture are held by the controller; the policy outputs positions
 only. An episode runs until t_max = 50 s, with no early stop, and is then scored by the success
@@ -671,7 +662,8 @@ $$\bar\alpha_k=\prod_{i\le k}(1-\beta_i), \qquad \beta_i = \min\Big(1-\tfrac{g(i
 
 The loss is the mean squared error over the 16 × 3 chunk, averaged over a batch of 256. The weights
 used for evaluation are an exponential moving average of θ. At inference the 16-step DDIM sampler in
-the diagram above inverts this noising, conditioned on the current O_t.
+the figure above inverts this noising, conditioned on the current O_t. In the figure,
+s_t denotes the normalized, flattened O_t (32 numbers).
 
 </details>
 
